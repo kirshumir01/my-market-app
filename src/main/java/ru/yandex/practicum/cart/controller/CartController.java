@@ -16,7 +16,6 @@ public class CartController {
 
     private final CartService cartService;
 
-
     @GetMapping("/cart/items")
     public String getCart(Model model) {
         CartDto cart = cartService.getCart();
