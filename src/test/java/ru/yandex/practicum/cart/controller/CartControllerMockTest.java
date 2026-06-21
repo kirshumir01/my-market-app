@@ -15,6 +15,8 @@ import ru.yandex.practicum.cart.model.CartAction;
 import ru.yandex.practicum.cart.service.CartService;
 import ru.yandex.practicum.exception.ErrorHandler;
 import ru.yandex.practicum.items.dto.ItemDto;
+import ru.yandex.practicum.request.mapper.CartRequestMapper;
+import ru.yandex.practicum.request.mapper.RequestParamMapper;
 
 import java.util.List;
 
@@ -22,7 +24,11 @@ import static org.mockito.Mockito.*;
 
 @ActiveProfiles("test")
 @WebFluxTest(CartController.class)
-@Import(ErrorHandler.class)
+@Import({
+        ErrorHandler.class,
+        CartRequestMapper.class,
+        RequestParamMapper.class
+})
 class CartControllerMockTest {
 
     @Autowired
