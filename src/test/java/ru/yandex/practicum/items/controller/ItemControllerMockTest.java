@@ -4,26 +4,29 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.cart.model.CartAction;
 import ru.yandex.practicum.cart.service.CartService;
+import ru.yandex.practicum.exception.ErrorHandler;
 import ru.yandex.practicum.exception.NotFoundException;
 import ru.yandex.practicum.items.dto.ItemDto;
 import ru.yandex.practicum.items.model.ItemSort;
 import ru.yandex.practicum.items.service.ItemService;
 
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(ItemController.class)
+@ActiveProfiles("test")
+@WebFluxTest(ItemController.class)
+@Import(ErrorHandler.class)
 class ItemControllerMockTest {
 
     @Autowired
-    MockMvc mvc;
+    WebTestClient webTestClient;
 
     @MockitoBean
     ItemService itemService;
@@ -43,13 +46,12 @@ class ItemControllerMockTest {
     @Test
     @DisplayName("GET /items/1 -> 200 OK")
     void getItemById_shouldReturnItem() throws Exception {
-        when(itemService.getItem(1L)).thenReturn(item_1);
+        when(itemService.getItem(1L)).thenReturn(Mono.just(item_1));
 
-        mvc.perform(get("/items/{id}", 1L))
-                .andExpect(status().isOk())
-                .andExpect(view().name("item"))
-                .andExpect(model().attributeExists("item"))
-                .andExpect(model().attribute("item", item_1));
+        webTestClient.get()
+                .uri("/items/{id}", 1L)
+                .exchange()
+                .expectStatus().isOk();
 
         verify(itemService).getItem(1L);
         verifyNoInteractions(cartService);
@@ -57,66 +59,82 @@ class ItemControllerMockTest {
 
     @Test
     @DisplayName("GET /items/999 -> 404 NOT FOUND")
-    void getNonExistingItemById_shouldNotReturnItem() throws Exception {
+    void getNonExistingItemById_shouldNotReturnItem() {
         when(itemService.getItem(999L))
-                .thenThrow(new NotFoundException("Item with id = 999 not found"));
+                .thenReturn(Mono.error(
+                        new NotFoundException("Item with id = 999 not found")
+                ));
 
-        mvc.perform(get("/items/{id}", 999L))
-                .andExpect(status().isNotFound());
+        webTestClient.get()
+                .uri("/items/{id}", 999L)
+                .exchange()
+                .expectStatus().isNotFound();
 
         verify(itemService).getItem(999L);
         verifyNoInteractions(cartService);
     }
 
     @Test
-    @DisplayName("POST /items/2?action=MINUS -> 200 OK")
-    void decreaseItemCountFromItemPage_shouldDecreaseCount() throws Exception {
-        when(itemService.getItem(2L)).thenReturn(item_2);
+    @DisplayName("POST /items/2?action=MINUS -> 303 SEE_OTHER")
+    void decreaseItemCountFromItemPage_shouldDecreaseCount() {
+        when(cartService.changeItemsCount(2L, CartAction.MINUS))
+                .thenReturn(Mono.empty());
 
-        mvc.perform(post("/items/{id}", 2L)
-                        .param("action", CartAction.MINUS.name()))
-                .andExpect(status().isOk())
-                .andExpect(view().name("item"))
-                .andExpect(model().attributeExists("item"))
-                .andExpect(model().attribute("item", item_2));
+        webTestClient.post()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/items/{id}")
+                        .queryParam("action", CartAction.MINUS)
+                        .build(2L))
+                .exchange()
+                .expectStatus().isSeeOther()
+                .expectHeader().valueEquals("Location", "/items/2");
 
         verify(cartService).changeItemsCount(2L, CartAction.MINUS);
-        verify(itemService).getItem(2L);
+        verifyNoMoreInteractions(cartService);
     }
 
     @Test
     @DisplayName("POST /items/1?action=PLUS -> 200 OK")
-    void increaseItemCountFromItemPage_shouldIncreaseCount() throws Exception {
-        when(itemService.getItem(1L)).thenReturn(item_1);
+    void increaseItemCountFromItemPage_shouldIncreaseCount() {
+        when(cartService.changeItemsCount(1L, CartAction.PLUS))
+                .thenReturn(Mono.empty());
 
-        mvc.perform(post("/items/{id}", 1L)
-                        .param("action", CartAction.PLUS.name()))
-                .andExpect(status().isOk())
-                .andExpect(view().name("item"))
-                .andExpect(model().attributeExists("item"))
-                .andExpect(model().attribute("item", item_1));
+        webTestClient.post()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/items/{id}")
+                        .queryParam("action", CartAction.PLUS.name())
+                        .build(1L))
+                .exchange()
+                .expectStatus().isSeeOther()
+                .expectHeader().valueEquals("Location", "/items/1");
 
         verify(cartService).changeItemsCount(1L, CartAction.PLUS);
-        verify(itemService).getItem(1L);
+        verifyNoMoreInteractions(cartService);
     }
 
     @Test
     @DisplayName("POST /items?search=&sort=NO&pageNumber=1&pageSize=3 -> redirect /items")
-    void changeItemCountFromItemCatalogPage_shouldDoRedirect() throws Exception {
+    void changeItemCountFromItemCatalogPage_shouldDoRedirect() {
+        when(cartService.changeItemsCount(1L, CartAction.PLUS))
+                .thenReturn(Mono.empty());
 
-        mvc.perform(post("/items")
-                        .param("id", "1")
-                        .param("action", CartAction.PLUS.name())
-                        .param("search", "")
-                        .param("sort", ItemSort.NO.name())
-                        .param("pageNumber", "1")
-                        .param("pageSize", "3"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl(
-                        "/items?search=&sort=NO&pageNumber=1&pageSize=3"
-                ));
+        webTestClient.post()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/items")
+                        .queryParam("id", 1)
+                        .queryParam("action", CartAction.PLUS.name())
+                        .queryParam("search", "")
+                        .queryParam("sort", ItemSort.NO.name())
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 3)
+                        .build())
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader()
+                .location("/items?search=&sort=NO&pageNumber=1&pageSize=3");
 
         verify(cartService).changeItemsCount(1L, CartAction.PLUS);
         verifyNoInteractions(itemService);
+        verifyNoMoreInteractions(cartService);
     }
 }
