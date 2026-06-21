@@ -9,15 +9,16 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.reactive.result.view.Rendering;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-import ru.yandex.practicum.cart.model.CartAction;
 import ru.yandex.practicum.cart.service.CartService;
-import ru.yandex.practicum.exception.BadRequestException;
+import ru.yandex.practicum.request.dto.CartRequest;
+import ru.yandex.practicum.request.mapper.CartRequestMapper;
 
 @Controller
 @AllArgsConstructor
 public class CartController {
 
     private final CartService cartService;
+    private final CartRequestMapper cartRequestMapper;
 
     @GetMapping("/cart/items")
     public Mono<Rendering> getCart() {
@@ -30,74 +31,19 @@ public class CartController {
 
     @PostMapping("/cart/items")
     public Mono<String> changeItemCountFromCart(ServerWebExchange exchange) {
-        MultiValueMap<String, String> params = exchange.getRequest().getQueryParams();
+        MultiValueMap<String, String> queryParams =
+                exchange.getRequest().getQueryParams();
 
         return exchange.getFormData()
                 .defaultIfEmpty(new LinkedMultiValueMap<>())
                 .flatMap(formData -> {
-                    Long itemId = getLongParam(params, formData, "id");
-                    CartAction action = getEnumParam(CartAction.class, params, formData, "action");
 
-                    return cartService.changeItemsCount(itemId, action)
+                    CartRequest request = cartRequestMapper.from(queryParams, formData);
+
+                    return cartService.changeItemsCount(
+                                    request.getItemId(),
+                                    request.getAction())
                             .thenReturn("redirect:/cart/items");
                 });
-    }
-
-    private Long getLongParam(
-            MultiValueMap<String, String> queryParams,
-            MultiValueMap<String, String> formData,
-            String... names
-    ) {
-        for (String name : names) {
-            String value = firstValue(queryParams, formData, name);
-
-            if (value != null && !value.isBlank()) {
-                try {
-                    return Long.parseLong(value);
-                } catch (NumberFormatException e) {
-                    throw new BadRequestException(
-                            "Parameter '%s' must be a number".formatted(name)
-                    );
-                }
-            }
-        }
-
-        throw new BadRequestException("Required parameter 'id' is missing");
-    }
-
-    private <T extends Enum<T>> T getEnumParam(
-            Class<T> enumClass,
-            MultiValueMap<String, String> queryParams,
-            MultiValueMap<String, String> formData,
-            String name
-    ) {
-        String value = firstValue(queryParams, formData, name);
-
-        if (value == null || value.isBlank()) {
-            throw new BadRequestException(
-                    "Required parameter '%s' is missing".formatted(name)
-            );
-        }
-
-        try {
-            return Enum.valueOf(enumClass, value);
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(
-                    "Invalid value '%s' for parameter '%s'".formatted(value, name)
-            );
-        }
-    }
-
-    private String firstValue(
-            MultiValueMap<String, String> queryParams,
-            MultiValueMap<String, String> formData,
-            String name
-    ) {
-        String queryValue = queryParams.getFirst(name);
-        if (queryValue != null) {
-            return queryValue;
-        }
-
-        return formData.getFirst(name);
     }
 }
