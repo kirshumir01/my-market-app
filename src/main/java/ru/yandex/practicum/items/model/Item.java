@@ -1,25 +1,27 @@
 package ru.yandex.practicum.items.model;
 
-import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
-@Entity
 @Table(name = "items")
 @Data
+@Builder
 @AllArgsConstructor
 @NoArgsConstructor
 public class Item {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     Long id;
-    @Column(name = "title", nullable = false, length = 50)
+    @Column("title")
     String title;
-    @Column(name = "description", nullable = false, length = 256)
+    @Column("description")
     String description;
-    @Column(name = "img_path")
+    @Column("img_path")
     String imgPath;
-    @Column(name = "price", nullable = false)
+    @Column("price")
     Long price;
 }
