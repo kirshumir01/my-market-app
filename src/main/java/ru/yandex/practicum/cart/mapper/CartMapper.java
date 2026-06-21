@@ -7,7 +7,7 @@ import java.util.List;
 
 public class CartMapper {
 
-    public static CartDto toCartDto(List<ItemDto> itemDtoList, Long total) {
+    public static CartDto toCartDto(List<ItemDto> itemDtoList, long total) {
         return CartDto.builder()
                 .items(itemDtoList)
                 .total(total)
