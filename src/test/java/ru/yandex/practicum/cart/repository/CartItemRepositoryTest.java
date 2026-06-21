@@ -2,39 +2,31 @@ package ru.yandex.practicum.cart.repository;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.jdbc.Sql;
 import ru.yandex.practicum.cart.model.CartItem;
-import ru.yandex.practicum.items.repository.ItemRepository;
+import ru.yandex.practicum.config.TestDataConfiguration;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
-@ActiveProfiles("test")
-@Sql(scripts = "/sql/clear.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-@Sql(scripts = "/sql/test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-class CartItemRepositoryTest {
+class CartItemRepositoryTest extends TestDataConfiguration {
 
     @Autowired
     CartItemRepository cartItemRepository;
-
-    @Autowired
-    ItemRepository itemRepository;
 
     @Test
     void findAllByItemIdIn_shouldReturnItems() {
         List<Long> itemIds = List.of(1L, 2L);
 
-        List<CartItem> result = cartItemRepository.findAllByItemIdIn(itemIds);
+        List<CartItem> result = cartItemRepository.findAllByItemIdIn(itemIds)
+                .collectList()
+                .block();
 
+        assertThat(result).isNotNull();
         assertThat(result).hasSize(2);
 
         assertThat(result)
-                .extracting(cartItem -> cartItem.getItem().getId())
+                .extracting(CartItem::getItemId)
                 .containsExactlyInAnyOrder(1L, 2L);
 
         assertThat(result)
@@ -44,40 +36,45 @@ class CartItemRepositoryTest {
 
     @Test
     void findAllByItemIdIn_shouldNotReturnItemsWhenIdsDoNotExist() {
-        List<CartItem> result = cartItemRepository.findAllByItemIdIn(List.of(999L, 1000L));
+        List<CartItem> result = cartItemRepository.findAllByItemIdIn(List.of(999L, 1000L))
+                .collectList()
+                .block();
 
+        assertThat(result).isNotNull();
         assertThat(result).isEmpty();
     }
 
     @Test
     void findByItemId_shouldReturnItem() {
-        Optional<CartItem> result = cartItemRepository.findByItemId(1L);
+        CartItem result = cartItemRepository.findByItemId(1L)
+                .block();
 
         assertThat(result).isNotNull();
-        assertThat(result.get().getId()).isEqualTo(1L);
-        assertThat(result.get().getItem().getId()).isEqualTo(1L);
-        assertThat(result.get().getCount()).isEqualTo(2);
+        assertThat(result.getId()).isEqualTo(1L);
+        assertThat(result.getItemId()).isEqualTo(1L);
+        assertThat(result.getCount()).isEqualTo(2);
     }
 
     @Test
-    void findByItemId_shouldReturnEmptyOptionalWhenItemDoesNotExistInCart() {
-        Optional<CartItem> result = cartItemRepository.findByItemId(3L);
+    void findByItemId_shouldReturnEmptyWhenItemDoesNotExistInCart() {
+        CartItem result = cartItemRepository.findByItemId(3L)
+                .block();
 
-        assertThat(result).isEmpty();
+        assertThat(result).isNull();
     }
 
     @Test
-    void findAllWithItems_shouldReturnCartItemsWithItems() {
-        List<CartItem> result = cartItemRepository.findAllWithItems();
+    void findAll_shouldReturnCartItems() {
+        List<CartItem> result = cartItemRepository.findAll()
+                .collectList()
+                .block();
 
+        assertThat(result).isNotNull();
         assertThat(result).hasSize(2);
 
         assertThat(result)
-                .extracting(cartItem -> cartItem.getItem().getTitle())
-                .containsExactlyInAnyOrder(
-                        "Test item_1 title",
-                        "Test item_2 title"
-                );
+                .extracting(CartItem::getItemId)
+                .containsExactlyInAnyOrder(1L, 2L);
 
         assertThat(result)
                 .extracting(CartItem::getCount)
