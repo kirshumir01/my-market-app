@@ -3,11 +3,14 @@ package ru.yandex.practicum.orders.service;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.cart.model.CartItem;
 import ru.yandex.practicum.cart.repository.CartItemRepository;
 import ru.yandex.practicum.exception.BadRequestException;
 import ru.yandex.practicum.exception.NotFoundException;
 import ru.yandex.practicum.items.model.Item;
+import ru.yandex.practicum.items.repository.ItemRepository;
 import ru.yandex.practicum.orders.dto.OrderDto;
 import ru.yandex.practicum.orders.mapper.OrderMapper;
 import ru.yandex.practicum.orders.model.Order;
@@ -15,9 +18,7 @@ import ru.yandex.practicum.orders.model.OrderItem;
 import ru.yandex.practicum.orders.repository.OrderItemRepository;
 import ru.yandex.practicum.orders.repository.OrderRepository;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @AllArgsConstructor
@@ -26,66 +27,89 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final CartItemRepository cartItemRepository;
+    private final ItemRepository itemRepository;
 
     @Override
     @Transactional(readOnly = true)
-    public List<OrderDto> getOrders() {
-        List<Order> orders = orderRepository.findAllWithItems();
-        return OrderMapper.toOrderDtoList(orders);
+    public Flux<OrderDto> getOrders() {
+        return orderRepository.findAllOrders()
+                .flatMap(this::toOrderDto);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public OrderDto getOrder(long orderId) {
-        Optional<Order> order = orderRepository.findByIdWithItems(orderId);
-
-        if (order.isEmpty()) {
-            throw new NotFoundException(String.format("Order with id = %d not found", orderId));
-        }
-
-        return OrderMapper.toOrderDto(order.get());
+    public Mono<OrderDto> getOrder(long orderId) {
+        return orderRepository.findOrderById(orderId)
+                .switchIfEmpty(Mono.error(
+                        new NotFoundException("Order with id = %d not found".formatted(orderId))
+                ))
+                .flatMap(this::toOrderDto);
     }
 
     @Override
     @Transactional
-    public long createOrderFromCart() {
-        List<CartItem> cartItemList = cartItemRepository.findAllWithItems();
+    public Mono<Long> createOrderFromCart() {
+        return cartItemRepository.findAll()
+                .collectList()
+                .flatMap(cartItems -> {
+                    if (cartItems.isEmpty()) {
+                        return Mono.error(new BadRequestException("Cart is empty"));
+                    }
 
-        if (cartItemList.isEmpty()) {
-            throw new BadRequestException("Cart is empty");
-        }
+                            List<Long> itemIds = cartItems.stream()
+                                    .map(CartItem::getItemId)
+                                    .toList();
 
-        Order order = new Order();
-        order.setTotalSum(0L);
-        order.setItems(new ArrayList<>());
+                            return itemRepository.findAllById(itemIds)
+                                    .collectMap(Item::getId)
+                                    .flatMap(itemsById -> {
+                                        long totalSum = cartItems.stream()
+                                                .mapToLong(cartItem -> {
+                                                    Item item = itemsById.get(cartItem.getItemId());
+                                                    return item.getPrice() * cartItem.getCount();
+                                                })
+                                                .sum();
 
-        Order savedOrder = orderRepository.save(order);
+                                                return orderRepository.save(new Order(null, totalSum))
+                                                        .flatMap(savedOrder -> {
+                                                            List<OrderItem> orderItems = cartItems.stream()
+                                                                    .map(cartItem -> {
+                                                                        Item item = itemsById.get(cartItem.getItemId());
 
-        List<OrderItem> orderItems = new ArrayList<>();
+                                                                        return new OrderItem(
+                                                                                null,
+                                                                                savedOrder.getId(),
+                                                                                item.getId(),
+                                                                                cartItem.getCount(),
+                                                                                item.getPrice()
+                                                                        );
+                                                                    })
+                                                                    .toList();
 
-        cartItemList.forEach(cartItem -> {
-                Item item = cartItem.getItem();
+                                                            return orderItemRepository.saveAll(orderItems)
+                                                                    .then(cartItemRepository.deleteAll())
+                                                                    .thenReturn(savedOrder.getId());
+                                                        });
+                                    });
+                });
+    }
 
-                OrderItem orderItem = new OrderItem();
-                orderItem.setOrder(savedOrder);
-                orderItem.setItem(item);
-                orderItem.setCount(cartItem.getCount());
-                orderItem.setPrice(item.getPrice());
+    private Mono<OrderDto> toOrderDto(Order order) {
+        return orderItemRepository.findAllByOrderIdOrderByIdAsc(order.getId())
+                .collectList()
+                .flatMap(orderItems -> {
+                    List<Long> itemIds = orderItems.stream()
+                            .map(OrderItem::getItemId)
+                            .toList();
 
-                orderItems.add(orderItem);
-        });
-
-        long total = cartItemList.stream()
-                .mapToLong(cartItem -> cartItem.getItem().getPrice() * cartItem.getCount())
-                .sum();
-
-        orderItemRepository.saveAll(orderItems);
-
-        savedOrder.setTotalSum(total);
-        orderRepository.save(savedOrder);
-
-        cartItemRepository.deleteAll();
-
-        return savedOrder.getId();
+                    return itemRepository.findAllById(itemIds)
+                            .collectMap(Item::getId)
+                            .map(itemsById -> OrderMapper.toOrderDto(
+                                    order.getId(),
+                                    order.getTotalSum(),
+                                    orderItems,
+                                    itemsById
+                            ));
+                });
     }
 }

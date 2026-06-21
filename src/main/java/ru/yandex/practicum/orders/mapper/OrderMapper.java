@@ -1,59 +1,38 @@
 package ru.yandex.practicum.orders.mapper;
 
 import ru.yandex.practicum.items.dto.ItemShortDto;
-import ru.yandex.practicum.items.mapper.ItemMapper;
 import ru.yandex.practicum.items.model.Item;
 import ru.yandex.practicum.orders.dto.OrderDto;
-import ru.yandex.practicum.orders.model.Order;
+import ru.yandex.practicum.orders.model.OrderItem;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class OrderMapper {
 
-    public static List<OrderDto> toOrderDtoList(List<Order> orders) {
-        List<OrderDto> orderDtoList = new ArrayList<>();
+    public static OrderDto toOrderDto(
+            Long orderId,
+            Long totalSum,
+            List<OrderItem> orderItems,
+            Map<Long, Item> itemsById
+    ) {
+        List<ItemShortDto> items = orderItems.stream()
+                .map(orderItem -> {
+                    Item item = itemsById.get(orderItem.getItemId());
 
-        orders.forEach(order -> {
-            List<ItemShortDto> itemShortDtoList = new ArrayList<>();
-
-            order.getItems().forEach(orderItem -> {
-                Item item = orderItem.getItem();
-
-                ItemShortDto itemShortDto = ItemMapper.toItemShortDto(item);
-                itemShortDto.setPrice(orderItem.getPrice());
-                itemShortDto.setCount(orderItem.getCount());
-
-                itemShortDtoList.add(itemShortDto);
-            });
-
-            OrderDto orderDto = OrderDto.builder()
-                    .id(order.getId())
-                    .items(itemShortDtoList)
-                    .totalSum(order.getTotalSum())
-                    .build();
-
-            orderDtoList.add(orderDto);
-        });
-
-        return orderDtoList;
-    }
-
-    public static OrderDto toOrderDto(Order order) {
-        List<ItemShortDto> itemShortDtoList = new ArrayList<>();
-
-        order.getItems().forEach(orderItem -> {
-            Item item = orderItem.getItem();
-            ItemShortDto itemShortDto = ItemMapper.toItemShortDto(item);
-            itemShortDto.setPrice(orderItem.getPrice());
-            itemShortDto.setCount(orderItem.getCount());
-            itemShortDtoList.add(itemShortDto);
-        });
+                    return ItemShortDto.builder()
+                            .id(item.getId())
+                            .title(item.getTitle())
+                            .price(orderItem.getPrice())
+                            .count(orderItem.getCount())
+                            .build();
+                })
+                .toList();
 
         return OrderDto.builder()
-                .id(order.getId())
-                .items(itemShortDtoList)
-                .totalSum(order.getTotalSum())
+                .id(orderId)
+                .totalSum(totalSum)
+                .items(items)
                 .build();
     }
 }
