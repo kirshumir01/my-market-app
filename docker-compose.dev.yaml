@@ -1,6 +1,10 @@
 services:
+
   postgres:
     image: postgres:16
+    container_name: my-market-postgres-dev
+
+    restart: unless-stopped
 
     environment:
       POSTGRES_DB: my-market-app-db
@@ -11,7 +15,7 @@ services:
       - "5432:5432"
 
     volumes:
-      - postgres_dev_data:/var/lib/postgresql/data
+      - postgres-data-dev:/var/lib/postgresql/data
 
 volumes:
-  postgres_dev_data:
+  postgres-data-dev:
