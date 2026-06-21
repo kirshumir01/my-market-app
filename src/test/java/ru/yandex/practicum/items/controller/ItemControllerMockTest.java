@@ -17,12 +17,18 @@ import ru.yandex.practicum.exception.NotFoundException;
 import ru.yandex.practicum.items.dto.ItemDto;
 import ru.yandex.practicum.items.model.ItemSort;
 import ru.yandex.practicum.items.service.ItemService;
+import ru.yandex.practicum.request.mapper.CatalogRequestMapper;
+import ru.yandex.practicum.request.mapper.RequestParamMapper;
 
 import static org.mockito.Mockito.*;
 
 @ActiveProfiles("test")
 @WebFluxTest(ItemController.class)
-@Import(ErrorHandler.class)
+@Import({
+        ErrorHandler.class,
+        CatalogRequestMapper.class,
+        RequestParamMapper.class
+})
 class ItemControllerMockTest {
 
     @Autowired
