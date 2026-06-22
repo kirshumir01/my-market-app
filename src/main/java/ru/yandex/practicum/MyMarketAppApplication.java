@@ -5,6 +5,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Profile;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.cart.model.CartItem;
 import ru.yandex.practicum.cart.repository.CartItemRepository;
 import ru.yandex.practicum.items.model.Item;
@@ -14,7 +16,6 @@ import ru.yandex.practicum.orders.model.OrderItem;
 import ru.yandex.practicum.orders.repository.OrderItemRepository;
 import ru.yandex.practicum.orders.repository.OrderRepository;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @SpringBootApplication
@@ -32,31 +33,45 @@ public class MyMarketAppApplication {
             OrderItemRepository orderItemRepository,
             CartItemRepository cartItemRepository
     ) {
-        return args -> {
-            cartItemRepository.deleteAll();
-            orderItemRepository.deleteAll();
-            orderRepository.deleteAll();
-            itemRepository.deleteAll();
-
-            List<Item> items = createItems(itemRepository);
-
-            createOrders(orderRepository, orderItemRepository, items);
-            createCartItems(cartItemRepository, items);
-        };
+        return args -> clearDatabase(
+                itemRepository,
+                orderRepository,
+                orderItemRepository,
+                cartItemRepository
+        )
+                .then(createItems(itemRepository))
+                .flatMap(items -> createOrders(orderRepository, orderItemRepository, items)
+                        .then(createCartItems(cartItemRepository, items)))
+                .block();
     }
 
-    private List<Item> createItems(ItemRepository itemRepository) {
-        return List.of(
-                itemRepository.save(new Item(null, "Test item_1 title", "Test item_1 description", "images/item_1.jpg", 999L)),
-                itemRepository.save(new Item(null, "Test item_2 title", "Test item_2 description", "images/item_2.jpg", 2999L)),
-                itemRepository.save(new Item(null, "Test item_3 title", "Test item_3 description", "images/item_3.jpg", 7999L)),
-                itemRepository.save(new Item(null, "Test item_4 title", "Test item_4 description", "images/item_4.jpg", 4999L)),
-                itemRepository.save(new Item(null, "Test item_5 title", "Test item_5 description", "images/item_5.jpg", 11999L)),
-                itemRepository.save(new Item(null, "Item_6 title", "Item_6 description", "images/item_6.jpg", 14999L))
-        );
+    private Mono<Void> clearDatabase(
+            ItemRepository itemRepository,
+            OrderRepository orderRepository,
+            OrderItemRepository orderItemRepository,
+            CartItemRepository cartItemRepository
+
+    ) {
+        return cartItemRepository.deleteAll()
+                .then(orderItemRepository.deleteAll())
+                .then(orderRepository.deleteAll())
+                .then(itemRepository.deleteAll());
     }
 
-    private void createOrders(
+    private Mono<List<Item>> createItems(ItemRepository itemRepository) {
+        return Flux.just(
+                new Item(null, "Test item_1 title", "Test item_1 description", "images/item_1.jpg", 999L),
+                new Item(null, "Test item_2 title", "Test item_2 description", "images/item_2.jpg", 2999L),
+                new Item(null, "Test item_3 title", "Test item_3 description", "images/item_3.jpg", 7999L),
+                new Item(null, "Test item_4 title", "Test item_4 description", "images/item_4.jpg", 4999L),
+                new Item(null, "Test item_5 title", "Test item_5 description", "images/item_5.jpg", 11999L),
+                new Item(null, "Item_6 title", "Item_6 description", "images/item_6.jpg", 14999L)
+        )
+                .concatMap(itemRepository::save)
+                .collectList();
+    }
+
+    private Mono<Void> createOrders(
             OrderRepository orderRepository,
             OrderItemRepository orderItemRepository,
             List<Item> items
@@ -66,22 +81,34 @@ public class MyMarketAppApplication {
         Item item2 = items.get(1);
         Item item3 = items.get(2);
 
-        Order order1 = orderRepository.save(new Order(null, new ArrayList<>(), 4997L));
-        Order order2 = orderRepository.save(new Order(null, new ArrayList<>(), 23997L));
+        Mono<Order> order1Mono = orderRepository.save(new Order(null, 4997L));
+        Mono<Order> order2Mono = orderRepository.save(new Order(null, 23997L));
 
-        orderItemRepository.save(new OrderItem(null, order1, item1, 2, 999L));
-        orderItemRepository.save(new OrderItem(null, order1, item2, 1, 2999L));
-        orderItemRepository.save(new OrderItem(null, order2, item3, 3, 7999L));
+        return order1Mono
+                .flatMap(order1 -> Flux.just(
+                        new OrderItem(null, order1.getId(), item1.getId(), 2, 999L),
+                        new OrderItem(null, order1.getId(), item2.getId(), 1, 2999L)
+                )
+                        .concatMap(orderItemRepository::save)
+                        .then())
+                .then(order2Mono.flatMap(order2 -> orderItemRepository.save(
+                        new OrderItem(null, order2.getId(), item3.getId(), 3, 7999L)
+                )))
+                .then();
     }
 
-    private void createCartItems(
+    private Mono<Void> createCartItems(
             CartItemRepository cartItemRepository,
             List<Item> items
     ) {
         Item item1 = items.get(0);
         Item item2 = items.get(1);
 
-        cartItemRepository.save(new CartItem(null, item1, 2));
-        cartItemRepository.save(new CartItem(null, item2, 5));
+        return Flux.just(
+                new CartItem(null, item1.getId(), 2),
+                new CartItem(null, item2.getId(), 5)
+                )
+                .concatMap(cartItemRepository::save)
+                .then();
     }
 }

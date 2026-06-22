@@ -6,9 +6,10 @@ import lombok.Setter;
 @Getter
 @Setter
 public class ErrorResponse {
-    String error;
-    String description;
-    StackTraceElement[] stackTrace;
+
+    private String error;
+    private String description;
+    private StackTraceElement[] stackTrace;
 
     public ErrorResponse(String error, String description) {
         this.error = error;

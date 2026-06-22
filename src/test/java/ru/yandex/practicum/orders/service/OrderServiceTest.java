@@ -4,28 +4,27 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import ru.yandex.practicum.cart.model.CartItem;
 import ru.yandex.practicum.cart.repository.CartItemRepository;
 import ru.yandex.practicum.exception.BadRequestException;
 import ru.yandex.practicum.exception.NotFoundException;
 import ru.yandex.practicum.items.model.Item;
-import ru.yandex.practicum.orders.dto.OrderDto;
+import ru.yandex.practicum.items.repository.ItemRepository;
 import ru.yandex.practicum.orders.model.Order;
 import ru.yandex.practicum.orders.model.OrderItem;
 import ru.yandex.practicum.orders.repository.OrderItemRepository;
 import ru.yandex.practicum.orders.repository.OrderRepository;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,259 +39,230 @@ class OrderServiceTest {
     @Mock
     private CartItemRepository cartItemRepository;
 
+    @Mock
+    private ItemRepository itemRepository;
+
     @InjectMocks
     private OrderServiceImpl orderService;
 
     private Item item_1;
     private Item item_2;
-    private Item item_3;
 
     private CartItem cartItem_1;
     private CartItem cartItem_2;
-    private CartItem cartItem_3;
 
     private Order order_1;
     private Order order_2;
 
     private OrderItem orderItem_1;
     private OrderItem orderItem_2;
-    private OrderItem orderItem_3;
 
     @BeforeEach
     void setUp() {
         item_1 = new Item(1L, "Test item_1 title", "Test item_1 description", null, 999L);
         item_2 = new Item(2L, "Test item_2 title", "Test item_2 description", null, 2999L);
-        item_3 = new Item(3L, "Test item_3 title", "Test item_3 description", null, 4999L);
 
-        cartItem_1 = new CartItem(1L, item_1, 2);
-        cartItem_2 = new CartItem(2L, item_2, 3);
-        cartItem_3 = new CartItem(3L, item_3, 2);
+        cartItem_1 = new CartItem(1L, 1L, 2);
+        cartItem_2 = new CartItem(2L, 2L, 3);
 
+        order_1 = new Order(1L, 999L * 2 + 2999L * 3);
+        order_2 = new Order(2L, 0L);
 
-        order_1 = new Order();
-        order_1.setId(1L);
-        order_1.setTotalSum(item_1.getPrice() * cartItem_1.getCount() + item_2.getPrice() * cartItem_2.getCount());
-
-        order_2 = new Order();
-        order_2.setId(2L);
-        order_2.setTotalSum(item_3.getPrice() * cartItem_3.getCount());
-
-        orderItem_1 = new OrderItem(1L, order_1, item_1, cartItem_1.getCount(), item_1.getPrice());
-        orderItem_2 = new OrderItem(2L, order_1, item_2, cartItem_2.getCount(), item_2.getPrice());
-        orderItem_3 = new OrderItem(3L, order_2, item_3, cartItem_3.getCount(), item_3.getPrice());
-
-        order_1.setItems(List.of(orderItem_1, orderItem_2));
-        order_2.setItems(List.of(orderItem_3));
+        orderItem_1 = new OrderItem(1L, 1L, 1L, 2, 999L);
+        orderItem_2 = new OrderItem(2L, 1L, 2L, 3, 2999L);
     }
 
     @Test
     void getOrders_shouldReturnOrders() {
-        when(orderRepository.findAllWithItems()).thenReturn(List.of(order_1, order_2));
+        when(orderRepository.findAllOrders())
+                .thenReturn(Flux.just(order_1, order_2));
 
-        List<OrderDto> result = orderService.getOrders();
+        when(orderItemRepository.findAllByOrderIdOrderByIdAsc(1L))
+                .thenReturn(Flux.just(orderItem_1, orderItem_2));
 
-        assertThat(result).hasSize(2);
+        when(orderItemRepository.findAllByOrderIdOrderByIdAsc(2L))
+                .thenReturn(Flux.empty());
 
-        OrderDto resultOrder = result.get(0);
+        when(itemRepository.findAllById(List.of(1L, 2L)))
+                .thenReturn(Flux.just(item_1, item_2));
 
-        assertThat(resultOrder.getId()).isEqualTo(order_1.getId());
-        assertThat(resultOrder.getTotalSum()).isEqualTo(order_1.getTotalSum());
-        assertThat(resultOrder.getItems()).hasSize(2);
+        when(itemRepository.findAllById(List.of()))
+                .thenReturn(Flux.empty());
 
-        verify(orderRepository).findAllWithItems();
-        verifyNoMoreInteractions(orderRepository);
+        StepVerifier.create(orderService.getOrders())
+                .expectNextCount(2)
+                .verifyComplete();
+
+        verify(orderRepository).findAllOrders();
+        verify(orderItemRepository).findAllByOrderIdOrderByIdAsc(1L);
+        verify(orderItemRepository).findAllByOrderIdOrderByIdAsc(2L);
     }
 
     @Test
-    void getOrders_whenRepositoryReturnsEmptyList_shouldReturnEmptyList() {
-        when(orderRepository.findAllWithItems()).thenReturn(List.of());
+    void getOrders_whenRepositoryReturnsEmptyFlux_shouldReturnEmptyFlux() {
+        when(orderRepository.findAllOrders())
+                .thenReturn(Flux.empty());
 
-        List<OrderDto> result = orderService.getOrders();
+        StepVerifier.create(orderService.getOrders())
+                .verifyComplete();
 
-        assertThat(result).isEmpty();
-
-        verify(orderRepository).findAllWithItems();
+        verify(orderRepository).findAllOrders();
         verifyNoMoreInteractions(orderRepository);
     }
 
     @Test
     void getOrder_whenOrderExists_shouldReturnOrder() {
-        when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(order_1));
+        when(orderRepository.findOrderById(1L))
+                .thenReturn(Mono.just(order_1));
 
-        OrderDto result = orderService.getOrder(1L);
+        when(orderItemRepository.findAllByOrderIdOrderByIdAsc(1L))
+                .thenReturn(Flux.just(orderItem_1, orderItem_2));
 
-        assertThat(result).isNotNull();
-        assertThat(result.getId()).isEqualTo(order_1.getId());
-        assertThat(result.getTotalSum()).isEqualTo(order_1.getTotalSum());
-        assertThat(result.getItems()).hasSize(2);
+        when(itemRepository.findAllById(List.of(1L, 2L)))
+                .thenReturn(Flux.just(item_1, item_2));
 
-        verify(orderRepository).findByIdWithItems(1L);
-        verifyNoMoreInteractions(orderRepository);
+        StepVerifier.create(orderService.getOrder(1L))
+                .assertNext(result -> {
+                    assertThat(result).isNotNull();
+                    assertThat(result.getId()).isEqualTo(1L);
+                    assertThat(result.getTotalSum()).isEqualTo(order_1.getTotalSum());
+                    assertThat(result.getItems()).hasSize(2);
+                })
+                .verifyComplete();
+
+        verify(orderRepository).findOrderById(1L);
+        verify(orderItemRepository).findAllByOrderIdOrderByIdAsc(1L);
+        verify(itemRepository).findAllById(List.of(1L, 2L));
     }
 
     @Test
     void getOrder_whenOrderDoesNotExist_shouldThrowNotFoundException() {
-        when(orderRepository.findByIdWithItems(999L)).thenReturn(Optional.empty());
+        when(orderRepository.findOrderById(999L))
+                .thenReturn(Mono.empty());
 
-        NotFoundException exception = assertThrows(
-                NotFoundException.class,
-                () -> orderService.getOrder(999L)
-        );
+        StepVerifier.create(orderService.getOrder(999L))
+                .expectErrorSatisfies(exception -> {
+                    assertThat(exception).isInstanceOf(NotFoundException.class);
+                    assertThat(exception.getMessage())
+                            .isEqualTo("Order with id = 999 not found");
+                })
+                .verify();
 
-        assertThat(exception.getMessage()).isEqualTo("Order with id = 999 not found");
-
-        verify(orderRepository).findByIdWithItems(999L);
-        verifyNoMoreInteractions(orderRepository);
+        verify(orderRepository).findOrderById(999L);
+        verifyNoInteractions(orderItemRepository);
+        verifyNoInteractions(itemRepository);
     }
 
     @Test
     void createOrderFromCart_whenCartIsEmpty_shouldThrowBadRequestException() {
-        when(cartItemRepository.findAllWithItems()).thenReturn(List.of());
+        when(cartItemRepository.findAll()).thenReturn(Flux.empty());
 
-        BadRequestException exception = assertThrows(
-                BadRequestException.class,
-                () -> orderService.createOrderFromCart()
-        );
+        StepVerifier.create(orderService.createOrderFromCart())
+                .expectErrorSatisfies(exception -> {
+                    assertThat(exception).isInstanceOf(BadRequestException.class);
+                    assertThat(exception.getMessage()).isEqualTo("Cart is empty");
+                })
+                .verify();
 
-        assertThat(exception.getMessage()).isEqualTo("Cart is empty");
-
-        verify(cartItemRepository).findAllWithItems();
-
+        verify(cartItemRepository).findAll();
+        verifyNoInteractions(itemRepository);
         verify(orderRepository, never()).save(any(Order.class));
-        verify(orderItemRepository, never()).saveAll(anyList());
+        verify(orderItemRepository, never()).saveAll(any(Iterable.class));
         verify(cartItemRepository, never()).deleteAll();
-
-        verifyNoMoreInteractions(
-                orderRepository,
-                orderItemRepository,
-                cartItemRepository
-        );
     }
 
     @Test
     void createOrderFromCart_whenCartHasItems_shouldCreateOrder() {
-        when(cartItemRepository.findAllWithItems()).thenReturn(List.of(cartItem_1, cartItem_2));
+        when(cartItemRepository.findAll())
+                .thenReturn(Flux.just(cartItem_1, cartItem_2));
+
+        when(itemRepository.findAllById(List.of(1L, 2L)))
+                .thenReturn(Flux.just(item_1, item_2));
 
         when(orderRepository.save(any(Order.class)))
                 .thenAnswer(invocation -> {
-                    Order savedOrder = invocation.getArgument(0);
-
-                    if (savedOrder.getId() == null) {
-                        savedOrder.setId(1L);
-                    }
-
-                    return savedOrder;
+                    Order order = invocation.getArgument(0);
+                    order.setId(1L);
+                    return Mono.just(order);
                 });
 
-        long result = orderService.createOrderFromCart();
+        when(orderItemRepository.saveAll(any(Iterable.class)))
+                .thenAnswer(invocation -> Flux.fromIterable(invocation.getArgument(0)));
 
-        assertThat(result).isEqualTo(1L);
+        when(cartItemRepository.deleteAll())
+                .thenReturn(Mono.empty());
 
-        verify(cartItemRepository).findAllWithItems();
+        StepVerifier.create(orderService.createOrderFromCart())
+                .expectNext(1L)
+                .verifyComplete();
 
-        verify(orderRepository, times(2)).save(any(Order.class));
-        verify(orderItemRepository).saveAll(anyList());
+        verify(cartItemRepository).findAll();
+        verify(itemRepository).findAllById(List.of(1L, 2L));
+        verify(orderRepository).save(any(Order.class));
+        verify(orderItemRepository).saveAll(any(Iterable.class));
         verify(cartItemRepository).deleteAll();
-
-        verifyNoMoreInteractions(
-                cartItemRepository,
-                orderRepository,
-                orderItemRepository
-        );
     }
 
     @Test
     void createOrderFromCart_shouldCalculateTotalCorrectly() {
-        when(cartItemRepository.findAllWithItems()).thenReturn(List.of(cartItem_1, cartItem_2));
+        when(cartItemRepository.findAll())
+                .thenReturn(Flux.just(cartItem_1, cartItem_2));
+
+        when(itemRepository.findAllById(List.of(1L, 2L)))
+                .thenReturn(Flux.just(item_1, item_2));
 
         when(orderRepository.save(any(Order.class)))
                 .thenAnswer(invocation -> {
-                    Order savedOrder = invocation.getArgument(0);
-                    savedOrder.setId(1L);
-                    return savedOrder;
+                    Order order = invocation.getArgument(0);
+                    order.setId(1L);
+                    return Mono.just(order);
                 });
 
-        orderService.createOrderFromCart();
+        when(orderItemRepository.saveAll(any(Iterable.class)))
+                .thenAnswer(invocation -> Flux.fromIterable(invocation.getArgument(0)));
+
+        when(cartItemRepository.deleteAll())
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(orderService.createOrderFromCart())
+                .expectNext(1L)
+                .verifyComplete();
 
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(orderCaptor.capture());
 
-        verify(orderRepository, times(2)).save(orderCaptor.capture());
+        Order savedOrder = orderCaptor.getValue();
 
-        Order finalSavedOrder = orderCaptor.getAllValues().get(1);
+        long expectedTotal = 999L * 2 + 2999L * 3;
 
-        long expectedTotal = item_1.getPrice() * cartItem_1.getCount()
-                + item_2.getPrice() * cartItem_2.getCount();
-
-        assertThat(finalSavedOrder.getTotalSum()).isEqualTo(expectedTotal);
-    }
-
-    @Test
-    void createOrderFromCart_shouldSaveOrderItemsWithCorrectPriceCountAndItem() {
-        when(cartItemRepository.findAllWithItems()).thenReturn(List.of(cartItem_1, cartItem_2));
-
-        when(orderRepository.save(any(Order.class)))
-                .thenAnswer(invocation -> {
-                    Order savedOrder = invocation.getArgument(0);
-                    savedOrder.setId(1L);
-                    return savedOrder;
-                });
-
-        orderService.createOrderFromCart();
-
-        ArgumentCaptor<List<OrderItem>> orderItemsCaptor = ArgumentCaptor.forClass(List.class);
-
-        verify(orderItemRepository).saveAll(orderItemsCaptor.capture());
-
-        List<OrderItem> savedOrderItems = orderItemsCaptor.getValue();
-
-        assertThat(savedOrderItems).hasSize(2);
-
-        OrderItem savedOrderItem1 = savedOrderItems.stream()
-                .filter(orderItem -> orderItem.getItem().getId().equals(item_1.getId()))
-                .findFirst()
-                .orElseThrow();
-
-        OrderItem savedOrderItem2 = savedOrderItems.stream()
-                .filter(orderItem -> orderItem.getItem().getId().equals(item_2.getId()))
-                .findFirst()
-                .orElseThrow();
-
-        assertThat(savedOrderItem1.getItem()).isEqualTo(item_1);
-        assertThat(savedOrderItem1.getCount()).isEqualTo(cartItem_1.getCount());
-        assertThat(savedOrderItem1.getPrice()).isEqualTo(item_1.getPrice());
-        assertThat(savedOrderItem1.getOrder()).isNotNull();
-        assertThat(savedOrderItem1.getOrder().getId()).isEqualTo(1L);
-
-        assertThat(savedOrderItem2.getItem()).isEqualTo(item_2);
-        assertThat(savedOrderItem2.getCount()).isEqualTo(cartItem_2.getCount());
-        assertThat(savedOrderItem2.getPrice()).isEqualTo(item_2.getPrice());
-        assertThat(savedOrderItem2.getOrder()).isNotNull();
-        assertThat(savedOrderItem2.getOrder().getId()).isEqualTo(1L);
+        assertThat(savedOrder.getTotalSum()).isEqualTo(expectedTotal);
     }
 
     @Test
     void createOrderFromCart_shouldClearCartAfterSuccessfulOrderCreation() {
-        when(cartItemRepository.findAllWithItems()).thenReturn(List.of(cartItem_1, cartItem_2));
+        when(cartItemRepository.findAll())
+                .thenReturn(Flux.just(cartItem_1, cartItem_2));
+
+        when(itemRepository.findAllById(List.of(1L, 2L)))
+                .thenReturn(Flux.just(item_1, item_2));
 
         when(orderRepository.save(any(Order.class)))
                 .thenAnswer(invocation -> {
-                    Order savedOrder = invocation.getArgument(0);
-                    savedOrder.setId(1L);
-                    return savedOrder;
+                    Order order = invocation.getArgument(0);
+                    order.setId(1L);
+                    return Mono.just(order);
                 });
 
-        orderService.createOrderFromCart();
+        when(orderItemRepository.saveAll(any(Iterable.class)))
+                .thenAnswer(invocation -> Flux.fromIterable(invocation.getArgument(0)));
 
-        InOrder inOrder = inOrder(
-                cartItemRepository,
-                orderRepository,
-                orderItemRepository
-        );
+        when(cartItemRepository.deleteAll())
+                .thenReturn(Mono.empty());
 
-        inOrder.verify(cartItemRepository).findAllWithItems();
-        inOrder.verify(orderRepository).save(any(Order.class));
-        inOrder.verify(orderItemRepository).saveAll(anyList());
-        inOrder.verify(orderRepository).save(any(Order.class));
-        inOrder.verify(cartItemRepository).deleteAll();
+        StepVerifier.create(orderService.createOrderFromCart())
+                .expectNext(1L)
+                .verifyComplete();
+
+        verify(cartItemRepository).deleteAll();
     }
 }

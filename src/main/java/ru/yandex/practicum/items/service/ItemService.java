@@ -1,8 +1,9 @@
 package ru.yandex.practicum.items.service;
 
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.items.dto.ItemDto;
 
 public interface ItemService {
 
-    ItemDto getItem(long itemId);
+    Mono<ItemDto> getItem(long itemId);
 }

@@ -4,10 +4,14 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.catalog.service.CatalogService;
+import ru.yandex.practicum.exception.ErrorHandler;
 import ru.yandex.practicum.items.dto.ItemDto;
 import ru.yandex.practicum.items.dto.ItemsPageDto;
 import ru.yandex.practicum.items.dto.PageDto;
@@ -15,16 +19,15 @@ import ru.yandex.practicum.items.model.ItemSort;
 
 import java.util.List;
 
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.mockito.Mockito.*;
 
-@WebMvcTest(CatalogController.class)
+@ActiveProfiles("test")
+@WebFluxTest(CatalogController.class)
+@Import(ErrorHandler.class)
 class CatalogControllerMockTest {
 
     @Autowired
-    MockMvc mvc;
+    WebTestClient webTestClient;
 
     @MockitoBean
     CatalogService catalogService;
@@ -42,24 +45,24 @@ class CatalogControllerMockTest {
 
     @Test
     @DisplayName("GET /items -> 200 OK")
-    void getItemsWithoutQueryParameters_shouldReturnAllItems() throws Exception {
+    void getItemsWithoutQueryParameters_shouldReturnAllItems() {
         PageDto paging = new PageDto(5, 1, false, false);
+
         ItemsPageDto page = new ItemsPageDto(
                 List.of(List.of(item_1, item_2, item_3)),
                 paging
         );
 
-        when(catalogService.getItems("", ItemSort.NO, 1, 5)).thenReturn(page);
+        when(catalogService.getItems("", ItemSort.NO, 1, 5))
+                .thenReturn(Mono.just(page));
 
-        mvc.perform(get("/items"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("items"))
-                .andExpect(model().attribute("items", page.getItems()))
-                .andExpect(model().attribute("search", ""))
-                .andExpect(model().attribute("sort", ItemSort.NO))
-                .andExpect(model().attribute("paging", paging));
+        webTestClient.get()
+                .uri("/items")
+                .exchange()
+                .expectStatus().isOk();
 
         verify(catalogService).getItems("", ItemSort.NO, 1, 5);
+        verifyNoMoreInteractions(catalogService);
     }
 
     @Test
@@ -71,121 +74,125 @@ class CatalogControllerMockTest {
                 paging
         );
 
-        when(catalogService.getItems("test", ItemSort.NO, 1, 3)).thenReturn(page);
+        when(catalogService.getItems("test", ItemSort.NO, 1, 3)).thenReturn(Mono.just(page));
 
-        mvc.perform(get("/items")
-                        .param("search", "test")
-                        .param("sort", "NO")
-                        .param("pageNumber", "1")
-                        .param("pageSize", "3"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("items"))
-                .andExpect(model().attribute("items", page.getItems()))
-                .andExpect(model().attribute("search", "test"))
-                .andExpect(model().attribute("sort", ItemSort.NO))
-                .andExpect(model().attribute("paging", paging));
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/items")
+                        .queryParam("search", "test")
+                        .queryParam("sort", ItemSort.NO.name())
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 3)
+                        .build())
+                .exchange()
+                .expectStatus().isOk();
 
         verify(catalogService).getItems("test", ItemSort.NO, 1, 3);
+        verifyNoMoreInteractions(catalogService);
     }
 
     @Test
     @DisplayName("GET /items?search=test&sort=PRICE&pageNumber=1&pageSize=3 -> 200 OK")
     void getItemsWithSortByPrice_shouldReturnItems() throws Exception {
         PageDto paging = new PageDto(3, 1, false, true);
+
         ItemsPageDto page = new ItemsPageDto(
                 List.of(List.of(item_1, item_2, item_3)),
                 paging
         );
 
-        when(catalogService.getItems("test", ItemSort.PRICE, 1, 3)).thenReturn(page);
+        when(catalogService.getItems("test", ItemSort.PRICE, 1, 3)).thenReturn(Mono.just(page));
 
-        mvc.perform(get("/items")
-                        .param("search", "test")
-                        .param("sort", "PRICE")
-                        .param("pageNumber", "1")
-                        .param("pageSize", "3"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("items"))
-                .andExpect(model().attribute("items", page.getItems()))
-                .andExpect(model().attribute("search", "test"))
-                .andExpect(model().attribute("sort", ItemSort.PRICE))
-                .andExpect(model().attribute("paging", paging));
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/items")
+                        .queryParam("search", "test")
+                        .queryParam("sort", ItemSort.PRICE.name())
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 3)
+                        .build())
+                .exchange()
+                .expectStatus().isOk();
 
         verify(catalogService).getItems("test", ItemSort.PRICE, 1, 3);
+        verifyNoMoreInteractions(catalogService);
     }
 
     @Test
     @DisplayName("GET /items?search=test&sort=ALPHA&pageNumber=1&pageSize=3 -> 200 OK")
     void getItemsWithSortByTitle_shouldReturnItems() throws Exception {
         PageDto paging = new PageDto(3, 1, false, true);
+
         ItemsPageDto page = new ItemsPageDto(
                 List.of(List.of(item_1, item_2, item_3)),
                 paging
         );
 
-        when(catalogService.getItems("test", ItemSort.ALPHA, 1, 3)).thenReturn(page);
+        when(catalogService.getItems("test", ItemSort.ALPHA, 1, 3)).thenReturn(Mono.just(page));
 
-        mvc.perform(get("/items")
-                        .param("search", "test")
-                        .param("sort", "ALPHA")
-                        .param("pageNumber", "1")
-                        .param("pageSize", "3"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("items"))
-                .andExpect(model().attribute("items", page.getItems()))
-                .andExpect(model().attribute("search", "test"))
-                .andExpect(model().attribute("sort", ItemSort.ALPHA))
-                .andExpect(model().attribute("paging", paging));
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/items")
+                        .queryParam("search", "test")
+                        .queryParam("sort", ItemSort.ALPHA.name())
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 3)
+                        .build())
+                .exchange()
+                .expectStatus().isOk();
 
         verify(catalogService).getItems("test", ItemSort.ALPHA, 1, 3);
+        verifyNoMoreInteractions(catalogService);
     }
 
     @Test
     @DisplayName("GET /items?search=test%item%1&sort=NO&pageNumber=1&pageSize=3 -> 200 OK")
     void getItemsBySearchQuery_shouldReturnItems() throws Exception {
         PageDto paging = new PageDto(3, 1, false, false);
+
         ItemsPageDto page = new ItemsPageDto(
                 List.of(List.of(item_1)),
                 paging
         );
 
-        when(catalogService.getItems("test item 1", ItemSort.NO, 1, 3)).thenReturn(page);
+        when(catalogService.getItems("test item 1", ItemSort.NO, 1, 3)).thenReturn(Mono.just(page));
 
-        mvc.perform(get("/items")
-                        .param("search", "test item 1")
-                        .param("sort", "NO")
-                        .param("pageNumber", "1")
-                        .param("pageSize", "3"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("items"))
-                .andExpect(model().attribute("items", page.getItems()))
-                .andExpect(model().attribute("search", "test item 1"))
-                .andExpect(model().attribute("sort", ItemSort.NO))
-                .andExpect(model().attribute("paging", paging));
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/items")
+                        .queryParam("search", "test item 1")
+                        .queryParam("sort", ItemSort.NO.name())
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 3)
+                        .build())
+                .exchange()
+                .expectStatus().isOk();
 
         verify(catalogService).getItems("test item 1", ItemSort.NO, 1, 3);
+        verifyNoMoreInteractions(catalogService);
     }
 
     @Test
     @DisplayName("GET /items?search=item_11&sort=NO&pageNumber=1&pageSize=3 -> 200 OK empty result")
     void getItemsBySearchQuery_shouldNotReturnItems() throws Exception {
         PageDto paging = new PageDto(3, 1, false, false);
+
         ItemsPageDto page = new ItemsPageDto(List.of(), paging);
 
-        when(catalogService.getItems("item_11", ItemSort.NO, 1, 3)).thenReturn(page);
+        when(catalogService.getItems("item_11", ItemSort.NO, 1, 3)).thenReturn(Mono.just(page));
 
-        mvc.perform(get("/items")
-                        .param("search", "item_11")
-                        .param("sort", "NO")
-                        .param("pageNumber", "1")
-                        .param("pageSize", "3"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("items"))
-                .andExpect(model().attribute("items", List.of()))
-                .andExpect(model().attribute("search", "item_11"))
-                .andExpect(model().attribute("sort", ItemSort.NO))
-                .andExpect(model().attribute("paging", paging));
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/items")
+                        .queryParam("search", "item_11")
+                        .queryParam("sort", ItemSort.NO.name())
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 3)
+                        .build())
+                .exchange()
+                .expectStatus().isOk();
 
         verify(catalogService).getItems("item_11", ItemSort.NO, 1, 3);
+        verifyNoMoreInteractions(catalogService);
     }
 }

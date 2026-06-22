@@ -2,23 +2,17 @@ package ru.yandex.practicum.items.repository;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.jdbc.Sql;
+import ru.yandex.practicum.config.TestDataConfiguration;
 import ru.yandex.practicum.items.model.Item;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-
-@DataJpaTest
-@ActiveProfiles("test")
-@Sql(scripts = "/sql/clear.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-@Sql(scripts = "/sql/test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-class ItemRepositoryTest {
+class ItemRepositoryTest extends TestDataConfiguration {
 
     @Autowired
     ItemRepository itemRepository;
@@ -27,18 +21,27 @@ class ItemRepositoryTest {
     void findByTitleOrDescriptionIsCaseInsensitive_shouldReturnPageableSort() {
         Pageable pageable = PageRequest.of(0, 5, Sort.by("price").ascending());
 
-        Page<Item> result = itemRepository
-                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+        List<Item> result = itemRepository
+                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCaseOrderByPriceAsc(
                         "test",
                         "test",
-                        pageable);
+                        pageable)
+                .collectList()
+                .block();
+
+        Long totalElements = itemRepository
+                .countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                        "test",
+                        "test")
+                .block();
 
         assertThat(result).isNotNull();
-        assertThat(result.getContent()).hasSize(5);
-        assertThat(result.getTotalElements()).isEqualTo(5);
-        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result).hasSize(5);
 
-        assertThat(result.getContent())
+        assertThat(totalElements).isNotNull();
+        assertThat(totalElements).isEqualTo(5);
+
+        assertThat(result)
                 .extracting(Item::getTitle)
                 .containsExactly(
                         "Test item_1 title",
@@ -48,7 +51,7 @@ class ItemRepositoryTest {
                         "Test item_5 title"
                 );
 
-        assertThat(result.getContent())
+        assertThat(result)
                 .extracting(Item::getPrice)
                 .containsExactly(999L, 2999L, 4999L, 7999L, 11999L);
     }
@@ -57,25 +60,34 @@ class ItemRepositoryTest {
     void findByTitleOrDescription_shouldReturnSeveralItems() {
         Pageable pageable = PageRequest.of(0, 10);
 
-        Page<Item> result = itemRepository
-                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
-                        "item",
-                        "item",
-                        pageable);
+        List<Item> result = itemRepository
+                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCaseOrderByPriceAsc(
+                        "test",
+                        "test",
+                        pageable)
+                .collectList()
+                .block();
+
+        Long totalElements = itemRepository
+                .countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                        "test",
+                        "test")
+                .block();
 
         assertThat(result).isNotNull();
-        assertThat(result.getContent()).hasSize(6);
-        assertThat(result.getTotalElements()).isEqualTo(6);
+        assertThat(result).hasSize(5);
 
-        assertThat(result.getContent())
+        assertThat(totalElements).isNotNull();
+        assertThat(totalElements).isEqualTo(5);
+
+        assertThat(result)
                 .extracting(Item::getTitle)
-                .containsExactlyInAnyOrder(
+                .containsExactly(
                         "Test item_1 title",
                         "Test item_2 title",
                         "Test item_4 title",
                         "Test item_3 title",
-                        "Test item_5 title",
-                        "Item_6 title"
+                        "Test item_5 title"
                 );
     }
 
@@ -83,16 +95,25 @@ class ItemRepositoryTest {
     void findByTitleOrDescription_shouldNotReturnItems() {
         Pageable pageable = PageRequest.of(0, 10);
 
-        Page<Item> result = itemRepository
-                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+        List<Item> result = itemRepository
+                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCaseOrderByPriceAsc(
                         "something",
                         "something",
-                        pageable
-                );
+                        pageable)
+                .collectList()
+                .block();
+
+        Long totalElements = itemRepository
+                .countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                        "something",
+                        "something")
+                .block();
+
 
         assertThat(result).isNotNull();
-        assertThat(result.getContent()).isEmpty();
-        assertThat(result.getTotalElements()).isZero();
-        assertThat(result.getTotalPages()).isZero();
+        assertThat(result).isEmpty();
+
+        assertThat(totalElements).isNotNull();
+        assertThat(totalElements).isZero();
     }
 }

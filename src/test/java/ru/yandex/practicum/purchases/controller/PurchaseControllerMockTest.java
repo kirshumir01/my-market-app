@@ -3,35 +3,42 @@ package ru.yandex.practicum.purchases.controller;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Mono;
+import ru.yandex.practicum.exception.ErrorHandler;
 import ru.yandex.practicum.orders.service.OrderService;
 
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.*;
 
-@WebMvcTest(PurchaseController.class)
+@ActiveProfiles("test")
+@WebFluxTest(PurchaseController.class)
+@Import(ErrorHandler.class)
 class PurchaseControllerMockTest {
 
     @Autowired
-    MockMvc mvc;
+    WebTestClient webTestClient;
 
     @MockitoBean
     OrderService orderService;
 
     @Test
     @DisplayName("POST /buy -> redirect /orders/{id}?newOrder=true")
-    void buyOrder_shouldDoRedirect() throws Exception {
-        when(orderService.createOrderFromCart()).thenReturn(1L);
+    void buyOrder_shouldDoRedirect() {
+        when(orderService.createOrderFromCart())
+                .thenReturn(Mono.just(1L));
 
-        mvc.perform(post("/buy"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/orders/1?newOrder=true"));
+        webTestClient.post()
+                .uri("/buy")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader()
+                .location("/orders/1?newOrder=true");
 
         verify(orderService).createOrderFromCart();
+        verifyNoMoreInteractions(orderService);
     }
 }

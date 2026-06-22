@@ -1,9 +1,12 @@
 package ru.yandex.practicum.orders.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
 import ru.yandex.practicum.orders.model.OrderItem;
 
 @Repository
-public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
+public interface OrderItemRepository extends ReactiveCrudRepository<OrderItem, Long> {
+
+    Flux<OrderItem> findAllByOrderIdOrderByIdAsc(Long orderId);
 }

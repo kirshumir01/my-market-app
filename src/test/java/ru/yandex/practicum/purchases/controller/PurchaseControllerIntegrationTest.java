@@ -2,28 +2,20 @@ package ru.yandex.practicum.purchases.controller;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.jdbc.Sql;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import ru.yandex.practicum.cart.model.CartItem;
 import ru.yandex.practicum.cart.repository.CartItemRepository;
+import ru.yandex.practicum.config.TestDataConfiguration;
 import ru.yandex.practicum.orders.repository.OrderRepository;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import java.util.List;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
-@Sql(scripts = "/sql/clear.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-@Sql(scripts = "/sql/test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-class PurchaseControllerIntegrationTest {
+import static org.assertj.core.api.Assertions.assertThat;
+
+class PurchaseControllerIntegrationTest extends TestDataConfiguration {
 
     @Autowired
-    private MockMvc mvc;
+    private WebTestClient webTestClient;
 
     @Autowired
     private CartItemRepository cartItemRepository;
@@ -33,16 +25,33 @@ class PurchaseControllerIntegrationTest {
 
     @Test
     void createOrderFromCart_shouldClearCartAfterOrderCreation() throws Exception {
-        assertThat(cartItemRepository.findAll()).isNotEmpty();
+        assertThat(getCartItems()).isNotEmpty();
 
-        long ordersCountBefore = orderRepository.count();
+        Long ordersCountBefore = orderRepository.count().block();
 
-        mvc.perform(post("/buy"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrlPattern("/orders/*?newOrder=true"));
+        assertThat(ordersCountBefore).isNotNull();
 
-        assertThat(cartItemRepository.findAll()).isEmpty();
+        webTestClient.post()
+                .uri("/buy")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader()
+                .valueMatches(
+                        "Location",
+                        "/orders/\\d+\\?newOrder=true"
+                );
 
-        assertThat(orderRepository.count()).isEqualTo(ordersCountBefore + 1);
+        assertThat(getCartItems()).isEmpty();
+
+        Long ordersCountAfter = orderRepository.count().block();
+
+        assertThat(ordersCountAfter).isNotNull();
+        assertThat(ordersCountAfter).isEqualTo(ordersCountBefore + 1);
+    }
+
+    private List<CartItem> getCartItems() {
+        return cartItemRepository.findAll()
+                .collectList()
+                .block();
     }
 }
