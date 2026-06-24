@@ -1,0 +1,163 @@
+openapi: 3.1.0
+
+info:
+  title: My Market Payment Service API
+  version: v1
+  description: |
+    API описывает интеграцию основного приложения интернет-магазина
+    с отдельным сервисом платежей.
+
+    Сервис предоставляет текущий баланс счёта и выполняет попытку оплаты заказа.
+
+servers:
+  - url: http://localhost:8081/api/v1
+
+paths:
+  /balance:
+    get:
+      operationId: getBalance
+      summary: Получить текущий баланс счёта
+      responses:
+        '200':
+          description: Баланс успешно получен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+
+        '500':
+          description: Внутренняя ошибка payment-service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /payments:
+    post:
+      operationId: makePayment
+      summary: Выполнить попытку оплаты заказа
+      description: |
+        Если средств достаточно, сервис списывает сумму заказа с баланса
+        и возвращает статус PAID.
+
+        Если средств недостаточно, сервис возвращает статус FAILED,
+        заказ в основном приложении не оформляется.
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+
+      responses:
+        '200':
+          description: Результат попытки оплаты
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+
+        '400':
+          description: Некорректный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '500':
+          description: Внутренняя ошибка payment-service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+
+    PaymentStatus:
+      type: string
+      enum:
+        - PENDING
+        - PAID
+        - FAILED
+        - CANCELLED
+
+    BalanceResponse:
+      type: object
+      required:
+        - balance
+        - currency
+      properties:
+        balance:
+          type: number
+          format: double
+        currency:
+          type: string
+
+    PaymentRequest:
+      type: object
+      required:
+        - amount
+        - currency
+      properties:
+        orderId:
+          type:
+            - integer
+            - "null"
+          format: int64
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+        currency:
+          type: string
+
+    PaymentResponse:
+      type: object
+      required:
+        - status
+        - amount
+        - remainingBalance
+        - currency
+        - message
+        - paymentTime
+      properties:
+        orderId:
+          type:
+            - integer
+            - "null"
+          format: int64
+
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+
+        amount:
+          type: number
+          format: double
+
+        remainingBalance:
+          type: number
+          format: double
+
+        currency:
+          type: string
+
+        message:
+          type: string
+
+        paymentTime:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - description
+      properties:
+        error:
+          type: string
+
+        description:
+          type: string
