@@ -29,7 +29,7 @@
                     <input class="form-control me-2 mw-100" type="search" placeholder="Найти..." aria-label="Поиск" name="search" th:value="${search}" form="main"/>
                     <button class="btn btn-outline-success" type="submit" form="main">Найти</button>
                     <div class="form-floating w-25">
-                        <select class="form-select" id="sort" name="sort" onchange="document.getElementById('main').submit()" form="main">
+                        <select class="form-select" id="sort" name="sort" onchange="document.ElementById('main').submit()" form="main">
                             <option value="NO" th:selected="${sort=='NO'}">нет</option>
                             <option value="ALPHA" th:selected="${sort=='ALPHA'}">по алфавиту</option>
                             <option value="PRICE" th:selected="${sort=='PRICE'}">по цене</option>

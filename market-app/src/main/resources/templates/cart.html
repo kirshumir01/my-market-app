@@ -51,9 +51,49 @@
         <div class="row p-2">
             <div class="col">
                 <form action="/buy" method="post" th:if="${!items.isEmpty()}">
-                    <div class="hstack gap-3">
-                        <h2 th:text="'Итого: '+${total}+' руб.'"/>
-                        <button class="btn btn-warning ms-auto">Купить</button>
+                    <div class="row p-2" th:if="${paymentError}">
+                        <div class="col">
+                            <div class="alert alert-danger" role="alert">
+                                Оплата не прошла. Недостаточно средств на счёте.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row p-2" th:if="${paymentServiceError}">
+                        <div class="col">
+                            <div class="alert alert-warning" role="alert">
+                                Сервис оплаты временно недоступен. Оформление заказа невозможно.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row p-2" th:if="${balance != null}">
+                        <div class="col">
+                            <div class="alert alert-info" role="alert">
+                                Доступный баланс:
+                                <strong th:text="${balance} + ' ' + ${currency}"></strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row p-2">
+                        <div class="col">
+                            <form action="/buy" method="post" th:if="${!items.isEmpty()}">
+                                <div class="hstack gap-3">
+                                    <h2 th:text="'Итого: ' + ${total} + ' руб.'"></h2>
+
+                                    <button class="btn btn-warning ms-auto"
+                                            type="submit"
+                                            th:disabled="${!canOrder}">
+                                        Купить
+                                    </button>
+                                </div>
+
+                                <div class="text-danger mt-2" th:if="${!canOrder and !paymentServiceError}">
+                                    Недостаточно средств для оформления заказа.
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </form>
             </div>
