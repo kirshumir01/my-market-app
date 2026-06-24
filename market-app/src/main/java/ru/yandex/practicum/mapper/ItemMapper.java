@@ -1,7 +1,6 @@
 package ru.yandex.practicum.mapper;
 
 import ru.yandex.practicum.dto.cache.ItemCardCacheDto;
-import ru.yandex.practicum.dto.cache.ItemListCacheDto;
 import ru.yandex.practicum.dto.item.ItemDto;
 import ru.yandex.practicum.model.Item;
 
