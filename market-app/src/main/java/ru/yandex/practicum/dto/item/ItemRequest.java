@@ -1,18 +1,17 @@
-package ru.yandex.practicum.cart.dto;
+package ru.yandex.practicum.dto.item;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
-@AllArgsConstructor
+@Builder
 @NoArgsConstructor
-public class CartItemDto {
-    private Long itemId;
+@AllArgsConstructor
+public class ItemRequest {
     private String title;
     private String description;
-    private String imgPath;
     private Long price;
-    private Integer count;
-    private Long totalPrice;
+    private String imgPath;
 }
