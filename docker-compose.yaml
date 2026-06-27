@@ -1,17 +1,17 @@
 services:
   postgres:
     image: postgres:16
-    container_name: my-market-postgres
+    container_name: market-postgres
     restart: always
 
     environment:
-      POSTGRES_DB: my-market-app
+      POSTGRES_DB: market-app
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
 
     ports:
       - "5432:5432"
-
+      -
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d my-market-app"]
       interval: 5s
@@ -21,18 +21,43 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  app:
-    build: .
-    container_name: my-market-app
+  redis:
+    image: redis:7
+    container_name: market-redis
     restart: always
+    ports:
+      - "6379:6379"
 
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  payment-service:
+    build:
+      context: ./payment-service
+    container_name: payment-service
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+
+  app:
+    build:
+      context: ./market-app
+    container_name: market-app
+    restart: always
     depends_on:
       postgres:
         condition: service_healthy
-
+      redis:
+        condition: service_healthy
+      payment-service:
+        condition: service_started
     ports:
       - "8080:8080"
-
     environment:
       SPRING_PROFILES_ACTIVE: docker
 
