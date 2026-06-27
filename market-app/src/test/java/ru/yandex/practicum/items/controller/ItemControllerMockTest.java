@@ -10,16 +10,17 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
-import ru.yandex.practicum.model.CartAction;
-import ru.yandex.practicum.service.CartService;
 import ru.yandex.practicum.controller.ItemController;
+import ru.yandex.practicum.dto.item.ItemDto;
 import ru.yandex.practicum.exception.ErrorHandler;
 import ru.yandex.practicum.exception.NotFoundException;
-import ru.yandex.practicum.dto.item.ItemDto;
-import ru.yandex.practicum.model.ItemSort;
-import ru.yandex.practicum.service.ItemService;
 import ru.yandex.practicum.mapper.CatalogRequestMapper;
+import ru.yandex.practicum.mapper.ItemRequestMapper;
 import ru.yandex.practicum.mapper.RequestParamMapper;
+import ru.yandex.practicum.model.CartAction;
+import ru.yandex.practicum.model.ItemSort;
+import ru.yandex.practicum.service.CartService;
+import ru.yandex.practicum.service.ItemService;
 
 import static org.mockito.Mockito.*;
 
@@ -40,6 +41,9 @@ class ItemControllerMockTest {
 
     @MockitoBean
     CartService cartService;
+
+    @MockitoBean
+    private ItemRequestMapper itemRequestMapper;
 
     private static ItemDto item_1;
     private static ItemDto item_2;
@@ -84,6 +88,9 @@ class ItemControllerMockTest {
     @Test
     @DisplayName("POST /items/2?action=MINUS -> 303 SEE_OTHER")
     void decreaseItemCountFromItemPage_shouldDecreaseCount() {
+        when(itemRequestMapper.getAction(any(), any()))
+                .thenReturn(CartAction.MINUS);
+
         when(cartService.changeItemsCount(2L, CartAction.MINUS))
                 .thenReturn(Mono.empty());
 
@@ -96,6 +103,7 @@ class ItemControllerMockTest {
                 .expectStatus().isSeeOther()
                 .expectHeader().valueEquals("Location", "/items/2");
 
+        verify(itemRequestMapper).getAction(any(), any());
         verify(cartService).changeItemsCount(2L, CartAction.MINUS);
         verifyNoMoreInteractions(cartService);
     }
@@ -103,6 +111,9 @@ class ItemControllerMockTest {
     @Test
     @DisplayName("POST /items/1?action=PLUS -> 200 OK")
     void increaseItemCountFromItemPage_shouldIncreaseCount() {
+        when(itemRequestMapper.getAction(any(), any()))
+                .thenReturn(CartAction.PLUS);
+
         when(cartService.changeItemsCount(1L, CartAction.PLUS))
                 .thenReturn(Mono.empty());
 
@@ -115,6 +126,7 @@ class ItemControllerMockTest {
                 .expectStatus().isSeeOther()
                 .expectHeader().valueEquals("Location", "/items/1");
 
+        verify(itemRequestMapper).getAction(any(), any());
         verify(cartService).changeItemsCount(1L, CartAction.PLUS);
         verifyNoMoreInteractions(cartService);
     }

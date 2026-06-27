@@ -1,6 +1,7 @@
 package ru.yandex.practicum.catalog.service;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -8,14 +9,16 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-import ru.yandex.practicum.model.CartItem;
-import ru.yandex.practicum.repository.CartItemRepository;
 import ru.yandex.practicum.dto.item.ItemDto;
 import ru.yandex.practicum.dto.item.PageDto;
+import ru.yandex.practicum.model.CartItem;
 import ru.yandex.practicum.model.Item;
 import ru.yandex.practicum.model.ItemSort;
+import ru.yandex.practicum.repository.CartItemRepository;
 import ru.yandex.practicum.repository.ItemRepository;
 import ru.yandex.practicum.service.impl.CatalogServiceImpl;
 
@@ -54,10 +57,17 @@ class CatalogServiceTest {
 
         cartItem_1 = new CartItem(1L, item_1.getId(), 2);
         cartItem_2 = new CartItem(2L, item_2.getId(), 3);
+
+        ReflectionTestUtils.setField(catalogService, "defaultPageSize", 5);
+        ReflectionTestUtils.setField(catalogService, "itemsPerRow", 3);
     }
 
     @Test
+    @DisplayName("getItems() -> returns paged items when search query is blank")
     void getItems_whenSearchIsBlank_shouldReturnPagedItems() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(3L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_1, item_2, item_3));
 
@@ -77,6 +87,7 @@ class CatalogServiceTest {
                 })
                 .verifyComplete();
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
         verify(itemRepository, never())
                 .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCaseOrderByPriceAsc(
@@ -89,7 +100,13 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("getItems() -> returns items matching search query")
     void getItems_whenSearchExists_shouldSearchByTitleAndDescription() {
+        when(itemRepository.countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                "item",
+                "item"
+        )).thenReturn(Mono.just(2L));
+
         when(itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCaseOrderByPriceAsc(
                 eq("item"),
                 eq("item"),
@@ -103,10 +120,23 @@ class CatalogServiceTest {
                 .assertNext(result -> {
                     assertThat(result).isNotNull();
                     assertThat(result.getItems()).hasSize(1);
-                    assertThat(result.getItems().get(0)).hasSize(3);
+                    assertThat(result.getItems().getFirst()).hasSize(3);
+
+                    assertThat(result.getItems().getFirst())
+                            .extracting(ItemDto::getId)
+                            .containsExactly(1L, 2L, -1L);
+
+                    assertThat(result.getItems().getFirst())
+                            .extracting(ItemDto::getCount)
+                            .containsExactly(2, 3, 0);
                 })
                 .verifyComplete();
 
+        verify(itemRepository).countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                "item",
+                "item"
+        );
+        verify(itemRepository, never()).count();
         verify(itemRepository).findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCaseOrderByPriceAsc(
                 eq("item"),
                 eq("item"),
@@ -118,7 +148,11 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("getItems() -> returns empty items list when repository is empty")
     void getItems_whenRepositoryReturnsEmptyPage_shouldReturnEmptyItemsList() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(0L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.empty());
 
@@ -134,13 +168,18 @@ class CatalogServiceTest {
                 })
                 .verifyComplete();
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
         verifyNoInteractions(cartItemRepository);
         verifyNoMoreInteractions(itemRepository);
     }
 
     @Test
+    @DisplayName("getItems() -> maps cart item counts correctly")
     void getItems_shouldMapCartItemsCountsCorrectly() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(2L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_1, item_2));
 
@@ -149,26 +188,30 @@ class CatalogServiceTest {
 
         StepVerifier.create(catalogService.getItems("", ItemSort.NO, 1, 3))
                 .assertNext(result -> {
-                    List<ItemDto> firstGroup = result.getItems().get(0);
+                    List<ItemDto> firstGroup = result.getItems().getFirst();
 
                     assertThat(firstGroup)
-                            .filteredOn(item -> !item.getId().equals(-1L))
+                            .extracting(ItemDto::getId)
+                            .containsExactly(1L, 2L, -1L);
+
+                    assertThat(firstGroup)
                             .extracting(ItemDto::getCount)
-                            .containsExactlyInAnyOrder(2, 3);
-
-                    assertThat(firstGroup)
-                            .filteredOn(item -> item.getId().equals(-1L))
-                            .hasSize(1);
+                            .containsExactly(2, 3, 0);
                 })
                 .verifyComplete();
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
         verify(cartItemRepository).findAllByItemIdIn(List.of(1L, 2L));
         verifyNoMoreInteractions(itemRepository, cartItemRepository);
     }
 
     @Test
+    @DisplayName("getItems() -> sets zero count for items not present in cart")
     void getItems_whenItemNotExistsInCart_shouldSetCountZero() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(2L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_1, item_2));
 
@@ -177,22 +220,30 @@ class CatalogServiceTest {
 
         StepVerifier.create(catalogService.getItems("", ItemSort.NO, 1, 3))
                 .assertNext(result -> {
-                    List<ItemDto> firstGroup = result.getItems().get(0);
+                    List<ItemDto> firstGroup = result.getItems().getFirst();
 
                     assertThat(firstGroup)
-                            .filteredOn(item -> !item.getId().equals(-1L))
+                            .extracting(ItemDto::getId)
+                            .containsExactly(1L, 2L, -1L);
+
+                    assertThat(firstGroup)
                             .extracting(ItemDto::getCount)
-                            .containsExactlyInAnyOrder(0, 0);
+                            .containsExactly(0, 0, 0);
                 })
                 .verifyComplete();
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
         verify(cartItemRepository).findAllByItemIdIn(List.of(1L, 2L));
         verifyNoMoreInteractions(itemRepository, cartItemRepository);
     }
 
     @Test
+    @DisplayName("getItems() -> calculates paging information correctly")
     void getItems_shouldCalculatePagingCorrectly() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(1L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_4));
 
@@ -217,7 +268,11 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("getItems() -> applies title ascending sort")
     void getItems_whenSortIsAlpha_shouldSortByTitleAscending() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(1L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_1));
 
@@ -225,18 +280,24 @@ class CatalogServiceTest {
                 .thenReturn(Flux.empty());
 
         StepVerifier.create(catalogService.getItems("", ItemSort.ALPHA, 1, 3))
-                .expectNextCount(1)
+                .assertNext(result -> {
+                    assertThat(result.getItems()).hasSize(1);
+                    assertThat(result.getItems().getFirst())
+                            .extracting(ItemDto::getId)
+                            .containsExactly(1L, -1L, -1L);
+                })
                 .verifyComplete();
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(pageableCaptor.capture());
         verify(cartItemRepository).findAllByItemIdIn(List.of(1L));
 
         Pageable pageable = pageableCaptor.getValue();
 
         assertThat(pageable.getPageNumber()).isZero();
-        assertThat(pageable.getPageSize()).isEqualTo(4);
+        assertThat(pageable.getPageSize()).isEqualTo(3);
         assertThat(pageable.getSort().getOrderFor("title")).isNotNull();
         assertThat(pageable.getSort().getOrderFor("title").isAscending()).isTrue();
 
@@ -244,7 +305,11 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("getItems() -> applies price ascending sort")
     void getItems_whenSortIsPrice_shouldSortByPriceAscending() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(2L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_1, item_2));
 
@@ -254,10 +319,7 @@ class CatalogServiceTest {
         StepVerifier.create(catalogService.getItems("", ItemSort.PRICE, 1, 3))
                 .assertNext(result -> {
                     assertThat(result.getItems()).hasSize(1);
-
-                    assertThat(result.getItems().getFirst())
-                            .hasSize(3);
-
+                    assertThat(result.getItems().getFirst()).hasSize(3);
                     assertThat(result.getItems().getFirst())
                             .extracting(ItemDto::getId)
                             .containsExactly(1L, 2L, -1L);
@@ -266,12 +328,14 @@ class CatalogServiceTest {
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(pageableCaptor.capture());
         verify(cartItemRepository).findAllByItemIdIn(List.of(1L, 2L));
 
         Pageable pageable = pageableCaptor.getValue();
 
         assertThat(pageable.getPageNumber()).isZero();
+        assertThat(pageable.getPageSize()).isEqualTo(3);
         assertThat(pageable.getSort().getOrderFor("price")).isNotNull();
         assertThat(pageable.getSort().getOrderFor("price").isAscending()).isTrue();
 
@@ -279,7 +343,11 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("getItems() -> returns items without sorting")
     void getItems_whenSortIsNo_shouldUseUnsortedPageable() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(1L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_1));
 
@@ -302,19 +370,25 @@ class CatalogServiceTest {
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(pageableCaptor.capture());
         verify(cartItemRepository).findAllByItemIdIn(List.of(1L));
 
         Pageable pageable = pageableCaptor.getValue();
 
         assertThat(pageable.getPageNumber()).isZero();
+        assertThat(pageable.getPageSize()).isEqualTo(3);
         assertThat(pageable.getSort().isUnsorted()).isTrue();
 
         verifyNoMoreInteractions(itemRepository, cartItemRepository);
     }
 
     @Test
-    void getItems_shouldGroupItemsByThree() {
+    @DisplayName("getItems() -> groups items by rows")
+    void getItems_shouldGroupItemsByRows() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(4L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_1, item_2, item_3, item_4));
 
@@ -324,8 +398,12 @@ class CatalogServiceTest {
         StepVerifier.create(catalogService.getItems("", ItemSort.NO, 1, 4))
                 .assertNext(result -> {
                     assertThat(result.getItems()).hasSize(2);
-                    assertThat(result.getItems().get(0)).hasSize(3);
-                    assertThat(result.getItems().get(1)).hasSize(3);
+
+                    assertThat(result.getItems().get(0))
+                            .hasSize(3);
+
+                    assertThat(result.getItems().get(1))
+                            .hasSize(3);
 
                     assertThat(result.getItems().get(0))
                             .extracting(ItemDto::getId)
@@ -337,13 +415,18 @@ class CatalogServiceTest {
                 })
                 .verifyComplete();
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
         verify(cartItemRepository).findAllByItemIdIn(List.of(1L, 2L, 3L, 4L));
         verifyNoMoreInteractions(itemRepository, cartItemRepository);
     }
 
     @Test
-    void getItems_whenItemsCountNotMultipleOfThree_shouldAddEmptyDtos() {
+    @DisplayName("getItems() -> returns incomplete last group without placeholder items")
+    void getItems_whenItemsCountLessThanItemsPerRow_shouldReturnOnlyExistingItems() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(4L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_1, item_2, item_3, item_4));
 
@@ -354,27 +437,28 @@ class CatalogServiceTest {
                 .assertNext(result -> {
                     assertThat(result.getItems()).hasSize(2);
 
-                    List<ItemDto> secondGroup = result.getItems().get(1);
+                    assertThat(result.getItems().getFirst())
+                            .extracting(ItemDto::getId)
+                            .containsExactly(1L, 2L, 3L);
 
-                    assertThat(secondGroup).hasSize(3);
-
-                    assertThat(secondGroup)
-                            .filteredOn(item -> !item.getId().equals(-1L))
-                            .hasSize(1);
-
-                    assertThat(secondGroup)
-                            .filteredOn(item -> item.getId().equals(-1L))
-                            .hasSize(2);
+                    assertThat(result.getItems().get(1))
+                            .extracting(ItemDto::getId)
+                            .containsExactly(4L, -1L, -1L);
                 })
                 .verifyComplete();
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
         verify(cartItemRepository).findAllByItemIdIn(List.of(1L, 2L, 3L, 4L));
         verifyNoMoreInteractions(itemRepository, cartItemRepository);
     }
 
     @Test
-    void getItems_whenItemsCountLessThanThree_shouldAddEmptyDtos() {
+    @DisplayName("getItems() -> returns single group when items count is less than row size")
+    void getItems_whenItemsCountLessThanThree_shouldReturnOnlyExistingItems() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(1L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_1));
 
@@ -384,21 +468,27 @@ class CatalogServiceTest {
         StepVerifier.create(catalogService.getItems("", ItemSort.NO, 1, 1))
                 .assertNext(result -> {
                     assertThat(result.getItems()).hasSize(1);
-                    assertThat(result.getItems().get(0)).hasSize(3);
 
-                    assertThat(result.getItems().get(0))
+                    assertThat(result.getItems().getFirst()).hasSize(3);
+
+                    assertThat(result.getItems().getFirst())
                             .extracting(ItemDto::getId)
                             .containsExactly(1L, -1L, -1L);
                 })
                 .verifyComplete();
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
         verify(cartItemRepository).findAllByItemIdIn(List.of(1L));
         verifyNoMoreInteractions(itemRepository, cartItemRepository);
     }
 
     @Test
+    @DisplayName("getItems() -> requests cart items using page item ids")
     void getItems_shouldCallCartRepositoryWithCorrectItemIds() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(3L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.just(item_1, item_2, item_3));
 
@@ -415,7 +505,11 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("getItems() -> does not request cart items when page is empty")
     void getItems_shouldNotCallCartRepositoryWhenItemsPageIsEmpty() {
+        when(itemRepository.count())
+                .thenReturn(Mono.just(0L));
+
         when(itemRepository.findAllBy(any(Pageable.class)))
                 .thenReturn(Flux.empty());
 
@@ -427,6 +521,7 @@ class CatalogServiceTest {
                 })
                 .verifyComplete();
 
+        verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
         verifyNoInteractions(cartItemRepository);
         verifyNoMoreInteractions(itemRepository);

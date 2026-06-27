@@ -1,5 +1,6 @@
 package ru.yandex.practicum.purchases.controller;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -7,13 +8,13 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.cache.ItemCacheService;
 import ru.yandex.practicum.client.PaymentClient;
+import ru.yandex.practicum.config.TestDataConfiguration;
 import ru.yandex.practicum.dto.cache.ItemCardCacheDto;
 import ru.yandex.practicum.dto.payment.PaymentRequestDto;
 import ru.yandex.practicum.dto.payment.PaymentResponseDto;
 import ru.yandex.practicum.dto.payment.PaymentStatus;
 import ru.yandex.practicum.model.CartItem;
 import ru.yandex.practicum.repository.CartItemRepository;
-import ru.yandex.practicum.config.TestDataConfiguration;
 import ru.yandex.practicum.repository.OrderRepository;
 
 import java.math.BigDecimal;
@@ -43,9 +44,10 @@ class PurchaseControllerIntegrationTest extends TestDataConfiguration {
     private PaymentClient paymentClient;
 
     @Test
+    @DisplayName("POST /buy -> 3xx Redirect to /orders/{id}?newOrder=true and clear cart")
     void createOrderFromCart_shouldClearCartAfterOrderCreation() {
-        when(itemCacheService.getItemCard(1L)).thenReturn(Mono.empty());
-        when(itemCacheService.getItemCard(2L)).thenReturn(Mono.empty());
+        when(itemCacheService.getItemCardCached(1L)).thenReturn(Mono.empty());
+        when(itemCacheService.getItemCardCached(2L)).thenReturn(Mono.empty());
 
         when(itemCacheService.saveItemCard(any(ItemCardCacheDto.class)))
                 .thenReturn(Mono.just(true));
@@ -84,9 +86,10 @@ class PurchaseControllerIntegrationTest extends TestDataConfiguration {
     }
 
     @Test
+    @DisplayName("POST /buy -> 3xx Redirect to /cart/items?paymentError=true when payment fails")
     void createOrderFromCart_whenPaymentFailed_shouldRedirectToCartAndKeepCart() {
-        when(itemCacheService.getItemCard(1L)).thenReturn(Mono.empty());
-        when(itemCacheService.getItemCard(2L)).thenReturn(Mono.empty());
+        when(itemCacheService.getItemCardCached(1L)).thenReturn(Mono.empty());
+        when(itemCacheService.getItemCardCached(2L)).thenReturn(Mono.empty());
 
         when(itemCacheService.saveItemCard(any(ItemCardCacheDto.class)))
                 .thenReturn(Mono.just(true));

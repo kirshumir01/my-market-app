@@ -1,5 +1,6 @@
 package ru.yandex.practicum.items.repository;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -19,6 +20,7 @@ class ItemRepositoryTest extends TestDataConfiguration {
     ItemRepository itemRepository;
 
     @Test
+    @DisplayName("Search items -> returns pageable results sorted by price")
     void findByTitleOrDescriptionIsCaseInsensitive_shouldReturnPageableSort() {
         Pageable pageable = PageRequest.of(0, 5, Sort.by("price").ascending());
 
@@ -58,6 +60,7 @@ class ItemRepositoryTest extends TestDataConfiguration {
     }
 
     @Test
+    @DisplayName("Search items -> returns matching items")
     void findByTitleOrDescription_shouldReturnSeveralItems() {
         Pageable pageable = PageRequest.of(0, 10);
 
@@ -93,6 +96,7 @@ class ItemRepositoryTest extends TestDataConfiguration {
     }
 
     @Test
+    @DisplayName("Search items -> returns empty when nothing matches")
     void findByTitleOrDescription_shouldNotReturnItems() {
         Pageable pageable = PageRequest.of(0, 10);
 

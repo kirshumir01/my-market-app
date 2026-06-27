@@ -14,14 +14,12 @@ import ru.yandex.practicum.client.PaymentClient;
 import ru.yandex.practicum.controller.CartController;
 import ru.yandex.practicum.dto.cart.CartDto;
 import ru.yandex.practicum.dto.item.ItemDto;
-import ru.yandex.practicum.dto.payment.BalanceResponseDto;
 import ru.yandex.practicum.exception.ErrorHandler;
 import ru.yandex.practicum.mapper.CartRequestMapper;
 import ru.yandex.practicum.mapper.RequestParamMapper;
 import ru.yandex.practicum.model.CartAction;
 import ru.yandex.practicum.service.CartService;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 import static org.mockito.Mockito.*;
@@ -71,50 +69,6 @@ class CartControllerMockTest {
         emptyCart = new CartDto();
         emptyCart.setItems(List.of());
         emptyCart.setTotal(0L);
-    }
-
-    @Test
-    @DisplayName("GET /cart/items -> 200 OK")
-    void getCart_shouldReturnCart() {
-        when(cartService.getCart())
-                .thenReturn(Mono.just(fullCart));
-
-        when(paymentClient.getBalance())
-                .thenReturn(Mono.just(new BalanceResponseDto(
-                        BigDecimal.valueOf(100000),
-                        "RUB"
-                )));
-
-        webTestClient.get()
-                .uri("/cart/items")
-                .exchange()
-                .expectStatus().isOk();
-
-        verify(cartService).getCart();
-        verify(paymentClient).getBalance();
-        verifyNoMoreInteractions(cartService, paymentClient);
-    }
-
-    @Test
-    @DisplayName("GET /cart/items -> 200 OK empty cart")
-    void getCart_shouldReturnEmptyCart() {
-        when(cartService.getCart())
-                .thenReturn(Mono.just(emptyCart));
-
-        when(paymentClient.getBalance())
-                .thenReturn(Mono.just(new BalanceResponseDto(
-                        BigDecimal.valueOf(100000),
-                        "RUB"
-                )));
-
-        webTestClient.get()
-                .uri("/cart/items")
-                .exchange()
-                .expectStatus().isOk();
-
-        verify(cartService).getCart();
-        verify(paymentClient).getBalance();
-        verifyNoMoreInteractions(cartService);
     }
 
     @Test

@@ -1,5 +1,6 @@
 package ru.yandex.practicum.orders.repository;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import ru.yandex.practicum.config.TestDataConfiguration;
@@ -16,6 +17,7 @@ class OrderItemRepositoryTest extends TestDataConfiguration {
     private OrderItemRepository orderItemRepository;
 
     @Test
+    @DisplayName("findAllByOrderIdOrderByIdAsc(orderId) -> returns order items sorted by id")
     void findAllByOrderIdOrderByIdAsc_shouldReturnOrderItems() {
         List<OrderItem> result = orderItemRepository.findAllByOrderIdOrderByIdAsc(1L)
                 .collectList()
@@ -38,6 +40,7 @@ class OrderItemRepositoryTest extends TestDataConfiguration {
     }
 
     @Test
+    @DisplayName("findAllByOrderIdOrderByIdAsc(orderId) -> returns empty when order does not exist")
     void findAllByOrderIdOrderByIdAsc_shouldReturnEmptyWhenOrderDoesNotExist() {
         List<OrderItem> result = orderItemRepository.findAllByOrderIdOrderByIdAsc(999L)
                 .collectList()

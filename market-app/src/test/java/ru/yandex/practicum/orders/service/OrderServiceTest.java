@@ -1,6 +1,7 @@
 package ru.yandex.practicum.orders.service;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -108,6 +109,7 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("getOrders() -> returns all orders")
     void getOrders_shouldReturnOrders() {
         when(orderRepository.findAllOrders())
                 .thenReturn(Flux.just(order_1, order_2));
@@ -134,6 +136,7 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("getOrders() -> returns empty Flux when no orders exist")
     void getOrders_whenRepositoryReturnsEmptyFlux_shouldReturnEmptyFlux() {
         when(orderRepository.findAllOrders())
                 .thenReturn(Flux.empty());
@@ -146,6 +149,7 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("getOrder(id) -> returns order when it exists")
     void getOrder_whenOrderExists_shouldReturnOrder() {
         when(orderRepository.findOrderById(1L))
                 .thenReturn(Mono.just(order_1));
@@ -171,6 +175,7 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("getOrder(id) -> throws NotFoundException when order does not exist")
     void getOrder_whenOrderDoesNotExist_shouldThrowNotFoundException() {
         when(orderRepository.findOrderById(999L))
                 .thenReturn(Mono.empty());
@@ -189,6 +194,7 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("createOrderFromCart() -> throws BadRequestException when cart is empty")
     void createOrderFromCart_whenCartIsEmpty_shouldThrowBadRequestException() {
         when(cartItemRepository.findAll()).thenReturn(Flux.empty());
 
@@ -207,14 +213,15 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("createOrderFromCart() -> creates order, saves items and clears cart")
     void createOrderFromCart_whenCartHasItems_shouldCreateOrder() {
         when(cartItemRepository.findAll())
                 .thenReturn(Flux.just(cartItem_1, cartItem_2));
 
-        when(cacheService.getItemCard(1L))
+        when(cacheService.getItemCardCached(1L))
                 .thenReturn(Mono.just(itemCard_1));
 
-        when(cacheService.getItemCard(2L))
+        when(cacheService.getItemCardCached(2L))
                 .thenReturn(Mono.just(itemCard_2));
 
         when(paymentClient.makePayment(any(PaymentRequestDto.class)))
@@ -246,8 +253,8 @@ class OrderServiceTest {
                 .verifyComplete();
 
         verify(cartItemRepository).findAll();
-        verify(cacheService).getItemCard(1L);
-        verify(cacheService).getItemCard(2L);
+        verify(cacheService).getItemCardCached(1L);
+        verify(cacheService).getItemCardCached(2L);
         verify(paymentClient).makePayment(any(PaymentRequestDto.class));
         verify(orderRepository).save(any(Order.class));
         verify(orderItemRepository).saveAll(any(Iterable.class));
@@ -257,14 +264,15 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("createOrderFromCart() -> calculates total order amount correctly")
     void createOrderFromCart_shouldCalculateTotalCorrectly() {
         when(cartItemRepository.findAll())
                 .thenReturn(Flux.just(cartItem_1, cartItem_2));
 
-        when(cacheService.getItemCard(1L))
+        when(cacheService.getItemCardCached(1L))
                 .thenReturn(Mono.just(itemCard_1));
 
-        when(cacheService.getItemCard(2L))
+        when(cacheService.getItemCardCached(2L))
                 .thenReturn(Mono.just(itemCard_2));
 
         when(paymentClient.makePayment(any(PaymentRequestDto.class)))
@@ -303,14 +311,15 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("createOrderFromCart() -> clears cart after successful order creation")
     void createOrderFromCart_shouldClearCartAfterSuccessfulOrderCreation() {
         when(cartItemRepository.findAll())
                 .thenReturn(Flux.just(cartItem_1, cartItem_2));
 
-        when(cacheService.getItemCard(1L))
+        when(cacheService.getItemCardCached(1L))
                 .thenReturn(Mono.just(itemCard_1));
 
-        when(cacheService.getItemCard(2L))
+        when(cacheService.getItemCardCached(2L))
                 .thenReturn(Mono.just(itemCard_2));
 
         when(paymentClient.makePayment(any(PaymentRequestDto.class)))

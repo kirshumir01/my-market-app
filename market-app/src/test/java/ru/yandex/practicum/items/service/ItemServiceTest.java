@@ -1,6 +1,7 @@
 package ru.yandex.practicum.items.service;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -10,10 +11,10 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.cache.ItemCacheService;
 import ru.yandex.practicum.dto.cache.ItemCardCacheDto;
-import ru.yandex.practicum.model.CartItem;
-import ru.yandex.practicum.repository.CartItemRepository;
 import ru.yandex.practicum.exception.NotFoundException;
+import ru.yandex.practicum.model.CartItem;
 import ru.yandex.practicum.model.Item;
+import ru.yandex.practicum.repository.CartItemRepository;
 import ru.yandex.practicum.repository.ItemRepository;
 import ru.yandex.practicum.service.impl.ItemServiceImpl;
 
@@ -54,8 +55,9 @@ class ItemServiceTest {
     }
 
     @Test
+    @DisplayName("getItem(id) -> returns item with cart count when item exists")
     void getItem_whenItemExistsInCacheAndExistsInCart_shouldReturnItemWithCount() {
-        when(cacheService.getItemCard(1L)).thenReturn(Mono.just(itemCard));
+        when(cacheService.getItemCardCached(1L)).thenReturn(Mono.just(itemCard));
         when(cartItemRepository.findByItemId(1L)).thenReturn(Mono.just(cartItem));
 
         StepVerifier.create(itemService.getItem(1L))
@@ -68,37 +70,15 @@ class ItemServiceTest {
                 })
                 .verifyComplete();
 
-        verify(cacheService).getItemCard(1L);
+        verify(cacheService).getItemCardCached(1L);
         verify(cartItemRepository).findByItemId(1L);
         verifyNoInteractions(itemRepository);
     }
 
     @Test
-    void getItem_whenItemNotInCacheButExistsInDb_shouldSaveToCacheAndReturnItem() {
-        when(cacheService.getItemCard(1L)).thenReturn(Mono.empty());
-        when(itemRepository.findById(1L)).thenReturn(Mono.just(item));
-        when(cacheService.saveItemCard(any(ItemCardCacheDto.class))).thenReturn(Mono.just(true));
-        when(cartItemRepository.findByItemId(1L)).thenReturn(Mono.just(cartItem));
-
-        StepVerifier.create(itemService.getItem(1L))
-                .assertNext(result -> {
-                    assertThat(result.getId()).isEqualTo(item.getId());
-                    assertThat(result.getTitle()).isEqualTo(item.getTitle());
-                    assertThat(result.getDescription()).isEqualTo(item.getDescription());
-                    assertThat(result.getPrice()).isEqualTo(item.getPrice());
-                    assertThat(result.getCount()).isEqualTo(3);
-                })
-                .verifyComplete();
-
-        verify(cacheService).getItemCard(1L);
-        verify(itemRepository).findById(1L);
-        verify(cacheService).saveItemCard(any(ItemCardCacheDto.class));
-        verify(cartItemRepository).findByItemId(1L);
-    }
-
-    @Test
+    @DisplayName("getItem(id) -> returns item with zero count when item is not in cart")
     void getItem_whenItemExistsButNotInCart_shouldReturnItemWithZeroCount() {
-        when(cacheService.getItemCard(1L)).thenReturn(Mono.just(itemCard));
+        when(cacheService.getItemCardCached(1L)).thenReturn(Mono.just(itemCard));
         when(cartItemRepository.findByItemId(1L)).thenReturn(Mono.empty());
 
         StepVerifier.create(itemService.getItem(1L))
@@ -111,15 +91,16 @@ class ItemServiceTest {
                 })
                 .verifyComplete();
 
-        verify(cacheService).getItemCard(1L);
+        verify(cacheService).getItemCardCached(1L);
         verify(cartItemRepository).findByItemId(1L);
         verifyNoInteractions(itemRepository);
     }
 
     @Test
+    @DisplayName("getItem(id) -> throws NotFoundException when item does not exist")
     void getItem_whenItemDoesNotExist_shouldThrowNotFoundException() {
-        when(cacheService.getItemCard(999L)).thenReturn(Mono.empty());
-        when(itemRepository.findById(999L)).thenReturn(Mono.empty());
+        when(cacheService.getItemCardCached(999L))
+                .thenReturn(Mono.error(new NotFoundException("Item with id = 999 not found")));
 
         StepVerifier.create(itemService.getItem(999L))
                 .expectErrorSatisfies(exception -> {
@@ -129,8 +110,8 @@ class ItemServiceTest {
                 })
                 .verify();
 
-        verify(cacheService).getItemCard(999L);
-        verify(itemRepository).findById(999L);
+        verify(cacheService).getItemCardCached(999L);
+        verifyNoInteractions(itemRepository);
         verifyNoInteractions(cartItemRepository);
     }
 }

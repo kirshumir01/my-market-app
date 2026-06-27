@@ -10,13 +10,13 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
-import ru.yandex.practicum.service.CatalogService;
 import ru.yandex.practicum.controller.CatalogController;
-import ru.yandex.practicum.exception.ErrorHandler;
 import ru.yandex.practicum.dto.item.ItemDto;
 import ru.yandex.practicum.dto.item.ItemsPageDto;
 import ru.yandex.practicum.dto.item.PageDto;
+import ru.yandex.practicum.exception.ErrorHandler;
 import ru.yandex.practicum.model.ItemSort;
+import ru.yandex.practicum.service.CatalogService;
 
 import java.util.List;
 

@@ -1,9 +1,10 @@
 package ru.yandex.practicum.cart.repository;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import ru.yandex.practicum.model.CartItem;
 import ru.yandex.practicum.config.TestDataConfiguration;
+import ru.yandex.practicum.model.CartItem;
 import ru.yandex.practicum.repository.CartItemRepository;
 
 import java.util.List;
@@ -16,6 +17,7 @@ class CartItemRepositoryTest extends TestDataConfiguration {
     CartItemRepository cartItemRepository;
 
     @Test
+    @DisplayName("findAllByItemIdIn(itemIds) -> returns cart items")
     void findAllByItemIdIn_shouldReturnItems() {
         List<Long> itemIds = List.of(1L, 2L);
 
@@ -36,7 +38,8 @@ class CartItemRepositoryTest extends TestDataConfiguration {
     }
 
     @Test
-    void findAllByItemIdIn_shouldNotReturnItemsWhenIdsDoNotExist() {
+    @DisplayName("findAllByItemIdIn(itemIds) -> returns empty when items do not exist")
+    void findAllByItemIdIn_shouldReturnEmptyWhenItemsDoNotExist() {
         List<CartItem> result = cartItemRepository.findAllByItemIdIn(List.of(999L, 1000L))
                 .collectList()
                 .block();
@@ -46,6 +49,7 @@ class CartItemRepositoryTest extends TestDataConfiguration {
     }
 
     @Test
+    @DisplayName("findByItemId(itemId) -> returns cart item")
     void findByItemId_shouldReturnItem() {
         CartItem result = cartItemRepository.findByItemId(1L)
                 .block();
@@ -57,6 +61,7 @@ class CartItemRepositoryTest extends TestDataConfiguration {
     }
 
     @Test
+    @DisplayName("findByItemId(itemId) -> returns empty when item is not in cart")
     void findByItemId_shouldReturnEmptyWhenItemDoesNotExistInCart() {
         CartItem result = cartItemRepository.findByItemId(3L)
                 .block();
@@ -65,7 +70,8 @@ class CartItemRepositoryTest extends TestDataConfiguration {
     }
 
     @Test
-    void findAll_shouldReturnCartItems() {
+    @DisplayName("findAll() -> returns all cart items")
+    void findAll_shouldReturnAllCartItems() {
         List<CartItem> result = cartItemRepository.findAll()
                 .collectList()
                 .block();

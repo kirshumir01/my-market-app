@@ -4,6 +4,7 @@ import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -41,6 +42,7 @@ class PaymentClientTest {
     }
 
     @Test
+    @DisplayName("getBalance() -> returns current account balance")
     void getBalance_shouldReturnBalance() {
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
@@ -62,6 +64,7 @@ class PaymentClientTest {
     }
 
     @Test
+    @DisplayName("makePayment() -> returns successful payment response")
     void makePayment_shouldReturnPaymentResponse() {
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
