@@ -19,6 +19,8 @@ public class CatalogController {
 
     private final CatalogService catalogService;
 
+    private static final int ITEMS_PER_ROW = 3;
+
     @GetMapping({"/", "/items"})
     public Mono<Rendering> getItems(
             @RequestParam(name = "search", defaultValue = "") String search,
@@ -32,6 +34,7 @@ public class CatalogController {
                         .modelAttribute("search", search)
                         .modelAttribute("sort", sort)
                         .modelAttribute("paging", page.getPaging())
+                        .modelAttribute("itemsPerRow", ITEMS_PER_ROW)
                         .build());
     }
 }
