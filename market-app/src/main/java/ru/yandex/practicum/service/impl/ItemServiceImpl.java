@@ -7,7 +7,6 @@ import reactor.core.publisher.Mono;
 import ru.yandex.practicum.cache.ItemCacheService;
 import ru.yandex.practicum.dto.item.ItemDto;
 import ru.yandex.practicum.dto.item.ItemRequest;
-import ru.yandex.practicum.exception.NotFoundException;
 import ru.yandex.practicum.mapper.ItemMapper;
 import ru.yandex.practicum.model.CartItem;
 import ru.yandex.practicum.model.Item;
@@ -25,16 +24,7 @@ public class ItemServiceImpl implements ItemService {
     @Override
     @Transactional(readOnly = true)
     public Mono<ItemDto> getItem(long itemId) {
-        return cacheService.getItemCard(itemId)
-                .switchIfEmpty(Mono.defer(() ->
-                        itemRepository.findById(itemId)
-                                .switchIfEmpty(Mono.error(new NotFoundException(
-                                        "Item with id = %d not found".formatted(itemId)
-                                )))
-                                .map(ItemMapper::toItemCardCacheDto)
-                                .flatMap(itemCard -> cacheService.saveItemCard(itemCard)
-                                        .thenReturn(itemCard))
-                ))
+        return cacheService.getItemCardCached(itemId)
                 .flatMap(itemCard -> cartItemRepository.findByItemId(itemId)
                         .map(CartItem::getCount)
                         .defaultIfEmpty(0)

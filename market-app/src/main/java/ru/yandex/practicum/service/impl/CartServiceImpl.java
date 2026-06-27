@@ -3,11 +3,11 @@ package ru.yandex.practicum.service.impl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.cache.ItemCacheService;
-import ru.yandex.practicum.dto.cache.ItemCardCacheDto;
+import ru.yandex.practicum.client.PaymentClient;
 import ru.yandex.practicum.dto.cart.CartDto;
+import ru.yandex.practicum.dto.cart.CartViewDto;
 import ru.yandex.practicum.dto.item.ItemDto;
 import ru.yandex.practicum.exception.NotFoundException;
 import ru.yandex.practicum.mapper.CartMapper;
@@ -24,38 +24,58 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CartServiceImpl implements CartService {
 
+    private static final String DEFAULT_CURRENCY = "RUB";
+
     private final CartItemRepository cartItemRepository;
     private final ItemRepository itemRepository;
     private final ItemCacheService cacheService;
+    private final PaymentClient paymentClient;
+
+    @Override
+    @Transactional(readOnly = true)
+    public Mono<CartViewDto> getCartView(boolean paymentError) {
+        return getCart()
+                .flatMap(cart -> paymentClient.getBalance()
+                        .map(balance -> CartMapper.toCartViewDto(
+                                cart,
+                                balance.getBalance(),
+                                balance.getCurrency(),
+                                paymentError,
+                                false
+                        ))
+                        .onErrorResume(ex -> Mono.just(CartMapper.toCartViewDto(
+                                cart,
+                                null,
+                                DEFAULT_CURRENCY,
+                                paymentError,
+                                true
+                        ))));
+    }
 
     @Override
     @Transactional(readOnly = true)
     public Mono<CartDto> getCart() {
         return cartItemRepository.findAll()
+                .flatMap(this::toItemDto)
                 .collectList()
-                .flatMap(cartItems -> {
-                    if (cartItems.isEmpty()) {
-                        return Mono.just(CartMapper.toCartDto(List.of(), 0));
-                    }
+                .map(this::toCartDto);
+    }
 
-                    return Flux.fromIterable(cartItems)
-                            .flatMap(cartItem ->
-                                    getItemCardFromCache(cartItem.getItemId())
-                                            .map(itemCard -> {
-                                                ItemDto itemDto = ItemMapper.toItemDto(itemCard);
-                                                itemDto.setCount(cartItem.getCount());
-                                                return itemDto;
-                                            })
-                            )
-                            .collectList()
-                            .map(items -> {
-                                long total = items.stream()
-                                        .mapToLong(item -> item.getPrice() * item.getCount())
-                                        .sum();
-
-                                return CartMapper.toCartDto(items, total);
-                            });
+    private Mono<ItemDto> toItemDto(CartItem cartItem) {
+        return cacheService.getItemCardCached(cartItem.getItemId())
+                .map(itemCard -> {
+                    ItemDto itemDto = ItemMapper.toItemDto(itemCard);
+                    itemDto.setCount(cartItem.getCount());
+                    return itemDto;
                 });
+    }
+
+    private CartDto toCartDto(List<ItemDto> items) {
+        long total = items.stream()
+                .mapToLong(item -> item.getPrice() * item.getCount())
+                .sum();
+
+        return CartMapper.toCartDto(items, total);
     }
 
     @Override
@@ -107,18 +127,5 @@ public class CartServiceImpl implements CartService {
                         new NotFoundException("Cart item with item id = %d not found".formatted(itemId))
                 ))
                 .flatMap(cartItemRepository::delete);
-    }
-
-    private Mono<ItemCardCacheDto> getItemCardFromCache(long itemId) {
-        return cacheService.getItemCard(itemId)
-                .switchIfEmpty(Mono.defer(() ->
-                        itemRepository.findById(itemId)
-                                .switchIfEmpty(Mono.error(new NotFoundException(
-                                        "Item with id = %d not found".formatted(itemId)
-                                )))
-                                .map(ItemMapper::toItemCardCacheDto)
-                                .flatMap(itemCard -> cacheService.saveItemCard(itemCard)
-                                        .thenReturn(itemCard))
-                ));
     }
 }

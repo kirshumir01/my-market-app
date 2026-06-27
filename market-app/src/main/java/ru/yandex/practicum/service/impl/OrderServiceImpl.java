@@ -5,16 +5,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuples;
 import ru.yandex.practicum.cache.ItemCacheService;
 import ru.yandex.practicum.client.PaymentClient;
-import ru.yandex.practicum.dto.cache.ItemCardCacheDto;
+import ru.yandex.practicum.dto.cart.CartItemWithCard;
 import ru.yandex.practicum.dto.order.OrderDto;
 import ru.yandex.practicum.dto.payment.PaymentRequestDto;
 import ru.yandex.practicum.dto.payment.PaymentStatus;
 import ru.yandex.practicum.exception.BadRequestException;
 import ru.yandex.practicum.exception.NotFoundException;
-import ru.yandex.practicum.mapper.ItemMapper;
 import ru.yandex.practicum.mapper.OrderMapper;
 import ru.yandex.practicum.model.CartItem;
 import ru.yandex.practicum.model.Item;
@@ -61,71 +59,9 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public Mono<Long> createOrderFromCart() {
-        return cartItemRepository.findAll()
-                .collectList()
-                .flatMap(cartItems -> {
-                    if (cartItems.isEmpty()) {
-                        return Mono.error(new BadRequestException("Cart is empty"));
-                    }
-
-                    return Flux.fromIterable(cartItems)
-                            .flatMap(cartItem -> getItemCard(cartItem.getItemId())
-                                    .map(itemCard -> Tuples.of(cartItem, itemCard)))
-                            .collectList()
-                            .flatMap(cartItemsWithCards -> {
-                                long totalSum = cartItemsWithCards.stream()
-                                        .mapToLong(tuple -> {
-                                            CartItem cartItem = tuple.getT1();
-                                            ItemCardCacheDto itemCard = tuple.getT2();
-
-                                            return itemCard.getPrice() * cartItem.getCount();
-                                        })
-                                        .sum();
-
-                                PaymentRequestDto paymentRequest = new PaymentRequestDto(
-                                        null,
-                                        BigDecimal.valueOf(totalSum),
-                                        "RUB"
-                                );
-
-                                return paymentClient.makePayment(paymentRequest)
-                                        .flatMap(paymentResponse -> {
-                                            if (paymentResponse.getStatus() != PaymentStatus.PAID) {
-                                                return Mono.error(new BadRequestException(
-                                                        paymentResponse.getMessage()
-                                                ));
-                                            }
-
-                                            Order order = new Order(
-                                                    null,
-                                                    totalSum,
-                                                    LocalDateTime.now()
-                                            );
-
-                                            return orderRepository.save(order)
-                                                    .flatMap(savedOrder -> {
-                                                        List<OrderItem> orderItems = cartItemsWithCards.stream()
-                                                                .map(tuple -> {
-                                                                    CartItem cartItem = tuple.getT1();
-                                                                    ItemCardCacheDto itemCard = tuple.getT2();
-
-                                                                    return new OrderItem(
-                                                                            null,
-                                                                            savedOrder.getId(),
-                                                                            itemCard.getId(),
-                                                                            cartItem.getCount(),
-                                                                            itemCard.getPrice()
-                                                                    );
-                                                                })
-                                                                .toList();
-
-                                                        return orderItemRepository.saveAll(orderItems)
-                                                                .then(cartItemRepository.deleteAll())
-                                                                .thenReturn(savedOrder.getId());
-                                                    });
-                                        });
-                            });
-                });
+        return getCartItemsWithCards()
+                .flatMap(items -> makePayment(items)
+                        .then(saveOrder(items)));
     }
 
     private Mono<OrderDto> toOrderDto(Order order) {
@@ -147,16 +83,84 @@ public class OrderServiceImpl implements OrderService {
                 });
     }
 
-    private Mono<ItemCardCacheDto> getItemCard(long itemId) {
-        return cacheService.getItemCard(itemId)
-                .switchIfEmpty(Mono.defer(() ->
-                        itemRepository.findById(itemId)
-                                .switchIfEmpty(Mono.error(new NotFoundException(
-                                                        "Item with id = %d not found".formatted(itemId)
-                                                )))
-                                .map(ItemMapper::toItemCardCacheDto)
-                                .flatMap(item -> cacheService.saveItemCard(item)
-                                        .thenReturn(item))
-                                ));
+    private Mono<List<CartItemWithCard>> getCartItemsWithCards() {
+        return cartItemRepository.findAll()
+                .collectList()
+                .flatMap(cartItems -> {
+                    if (cartItems.isEmpty()) {
+                        return Mono.error(new BadRequestException("Cart is empty"));
+                    }
+
+                    return Flux.fromIterable(cartItems)
+                            .flatMap(this::toCartItemWithCard)
+                            .collectList();
+                });
+    }
+
+    private Mono<CartItemWithCard> toCartItemWithCard(CartItem cartItem) {
+        return cacheService.getItemCardCached(cartItem.getItemId())
+                .map(itemCard -> new CartItemWithCard(cartItem, itemCard));
+    }
+
+    private Mono<Void> makePayment(List<CartItemWithCard> items) {
+        long totalSum = calculateTotalSum(items);
+
+        PaymentRequestDto paymentRequest = new PaymentRequestDto(
+                null,
+                BigDecimal.valueOf(totalSum),
+                "RUB"
+        );
+
+        return paymentClient.makePayment(paymentRequest)
+                .flatMap(paymentResponse -> {
+                    if (paymentResponse.getStatus() != PaymentStatus.PAID) {
+                        return Mono.error(new BadRequestException(paymentResponse.getMessage()));
+                    }
+
+                    return Mono.empty();
+                });
+    }
+
+    private Mono<Long> saveOrder(List<CartItemWithCard> items) {
+        long totalSum = calculateTotalSum(items);
+
+        Order order = new Order(
+                null,
+                totalSum,
+                LocalDateTime.now()
+        );
+
+        return orderRepository.save(order)
+                .flatMap(savedOrder -> saveOrderItems(savedOrder, items)
+                        .then(clearCart())
+                        .thenReturn(savedOrder.getId()));
+    }
+
+    private Mono<Void> saveOrderItems(Order order, List<CartItemWithCard> items) {
+        List<OrderItem> orderItems = items.stream()
+                .map(item -> toOrderItem(order, item))
+                .toList();
+
+        return orderItemRepository.saveAll(orderItems).then();
+    }
+
+    private OrderItem toOrderItem(Order order, CartItemWithCard item) {
+        return new OrderItem(
+                null,
+                order.getId(),
+                item.getItemCard().getId(),
+                item.getCartItem().getCount(),
+                item.getItemCard().getPrice()
+        );
+    }
+
+    private Mono<Void> clearCart() {
+        return cartItemRepository.deleteAll();
+    }
+
+    private long calculateTotalSum(List<CartItemWithCard> items) {
+        return items.stream()
+                .mapToLong(item -> item.getItemCard().getPrice() * item.getCartItem().getCount())
+                .sum();
     }
 }
