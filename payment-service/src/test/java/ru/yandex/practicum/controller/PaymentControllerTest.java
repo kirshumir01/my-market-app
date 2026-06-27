@@ -1,5 +1,6 @@
 package ru.yandex.practicum.controller;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,7 @@ class PaymentControllerTest {
     private PaymentService paymentService;
 
     @Test
+    @DisplayName("GET /api/v1/balance -> 200 OK with current balance")
     void getBalanceReturnsPayloadFromService() {
         when(paymentService.getBalance())
                 .thenReturn(Mono.just(new BalanceResponseDto(
@@ -57,6 +59,7 @@ class PaymentControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/payments -> 200 OK with successful payment response")
     void postPaymentDelegatesToServiceAndReturnsJson() {
         Instant paymentTime = Instant.parse("2026-06-23T12:30:00Z");
 
@@ -110,6 +113,7 @@ class PaymentControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/payments -> 200 OK with failed payment response")
     void postPaymentWhenPaymentFailedReturnsFailedStatus() {
         Instant paymentTime = Instant.parse("2026-06-23T12:31:00Z");
 
@@ -152,6 +156,7 @@ class PaymentControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/payments with zero amount -> 400 BAD REQUEST")
     void postPaymentWhenAmountIsZeroReturnsBadRequest() {
         String request = """
                 {
@@ -175,6 +180,7 @@ class PaymentControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/payments with blank currency -> 400 BAD REQUEST")
     void postPaymentWhenCurrencyIsBlankReturnsBadRequest() {
         String request = """
                 {
@@ -198,6 +204,7 @@ class PaymentControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/payments with malformed JSON -> 400 BAD REQUEST")
     void postPaymentWhenBodyIsMalformedReturnsBadRequest() {
         String request = """
                 {

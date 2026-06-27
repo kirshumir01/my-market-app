@@ -1,6 +1,7 @@
 package ru.yandex.practicum.service;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.dto.PaymentRequestDto;
@@ -23,6 +24,7 @@ class PaymentServiceImplTest {
     }
 
     @Test
+    @DisplayName("getBalance() -> returns current balance")
     void getBalanceReturnsCurrentBalance() {
         StepVerifier.create(paymentService.getBalance())
                 .expectNextMatches(response ->
@@ -32,6 +34,7 @@ class PaymentServiceImplTest {
     }
 
     @Test
+    @DisplayName("makePayment() -> returns PAID and updates balance when money is enough")
     void makePaymentWhenEnoughMoneyReturnsPaidAndChangesBalance() {
         PaymentRequestDto request = new PaymentRequestDto(
                 1L,
@@ -57,6 +60,7 @@ class PaymentServiceImplTest {
     }
 
     @Test
+    @DisplayName("makePayment() -> returns FAILED and keeps balance when money is not enough")
     void makePaymentWhenNotEnoughMoneyReturnsFailedAndDoesNotChangeBalance() {
         PaymentRequestDto request = new PaymentRequestDto(
                 1L,

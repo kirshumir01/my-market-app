@@ -1,5 +1,6 @@
 package ru.yandex.practicum.controller;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +20,7 @@ class PaymentControllerIntegrationTest {
     private WebTestClient webTestClient;
 
     @Test
+    @DisplayName("GET /api/v1/balance -> 200 OK with current balance")
     void getBalance_shouldReturnCurrentBalance() {
         webTestClient.get()
                 .uri("/api/v1/balance")
@@ -30,6 +32,7 @@ class PaymentControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/payments -> 200 OK with PAID payment status")
     void makePayment_whenEnoughMoney_shouldReturnPaidStatus() {
         String request = """
                 {
@@ -56,6 +59,7 @@ class PaymentControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/payments -> 200 OK with FAILED payment status")
     void makePayment_whenNotEnoughMoney_shouldReturnFailedStatus() {
         String request = """
                 {
@@ -82,6 +86,7 @@ class PaymentControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/payments with invalid amount -> 400 BAD REQUEST")
     void makePayment_whenAmountIsInvalid_shouldReturnBadRequest() {
         String request = """
                 {
