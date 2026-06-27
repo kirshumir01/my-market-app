@@ -4,6 +4,8 @@ import ru.yandex.practicum.dto.cache.ItemCardCacheDto;
 import ru.yandex.practicum.dto.item.ItemDto;
 import ru.yandex.practicum.model.Item;
 
+import java.util.Map;
+
 public class ItemMapper {
 
     public static ItemDto toItemDto(Item item) {
@@ -13,17 +15,6 @@ public class ItemMapper {
                 .description(item.getDescription())
                 .imgPath(item.getImgPath())
                 .price(item.getPrice())
-                .count(0)
-                .build();
-    }
-
-    public static ItemDto toItemEmptyDto() {
-        return ItemDto.builder()
-                .id(-1L)
-                .title("")
-                .description("")
-                .imgPath("")
-                .price(0L)
                 .count(0)
                 .build();
     }
@@ -45,6 +36,13 @@ public class ItemMapper {
                 .title(item.getTitle())
                 .description(item.getDescription())
                 .price(item.getPrice())
+                .count(0)
                 .build();
+    }
+
+    public static ItemDto toItemDto(Item item, Map<Long, Integer> itemsCount) {
+        ItemDto itemDto = toItemDto(item);
+        itemDto.setCount(itemsCount.getOrDefault(item.getId(), 0));
+        return itemDto;
     }
 }
