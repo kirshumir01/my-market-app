@@ -11,12 +11,15 @@ import ru.yandex.practicum.dto.PaymentStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 public class PaymentServiceImpl implements PaymentService {
 
     private final String currency;
     private final AtomicReference<BigDecimal> balance;
+
+    private final ReentrantLock paymentLock = new ReentrantLock();
 
     public PaymentServiceImpl(
             @Value("${payment.currency}") String currency,
@@ -37,15 +40,18 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public Mono<PaymentResponseDto> makePayment(PaymentRequestDto request) {
+        return Mono.fromSupplier(() -> processPayment(request));
+    }
 
-        Instant paymentTime = Instant.now();
+    private PaymentResponseDto processPayment(PaymentRequestDto request) {
+        paymentLock.lock();
 
-        while (true) {
+        try {
+            Instant paymentTime = Instant.now();
             BigDecimal currentBalance = balance.get();
 
             if (currentBalance.compareTo(request.getAmount()) < 0) {
-                return Mono.just(
-                        new PaymentResponseDto(
+                return new PaymentResponseDto(
                                 request.getOrderId(),
                                 PaymentStatus.FAILED,
                                 request.getAmount(),
@@ -53,25 +59,23 @@ public class PaymentServiceImpl implements PaymentService {
                                 request.getCurrency(),
                                 "Not enough money on balance",
                                 paymentTime
-                        )
                 );
             }
 
             BigDecimal remainingBalance = currentBalance.subtract(request.getAmount());
+            balance.set(remainingBalance);
 
-            if (balance.compareAndSet(currentBalance, remainingBalance)) {
-                return Mono.just(
-                        new PaymentResponseDto(
-                                request.getOrderId(),
-                                PaymentStatus.PAID,
-                                request.getAmount(),
-                                remainingBalance,
-                                request.getCurrency(),
-                                "Payment completed successfully",
-                                paymentTime
-                        )
-                );
-            }
+            return new PaymentResponseDto(
+                    request.getOrderId(),
+                    PaymentStatus.PAID,
+                    request.getAmount(),
+                    remainingBalance,
+                    request.getCurrency(),
+                    "Payment completed successfully",
+                    paymentTime
+            );
+        } finally {
+            paymentLock.unlock();
         }
     }
 }
