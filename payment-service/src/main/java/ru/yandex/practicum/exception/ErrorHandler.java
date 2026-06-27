@@ -10,7 +10,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.server.ServerWebInputException;
 
-import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestControllerAdvice(basePackages = "ru.yandex.practicum")
@@ -24,60 +25,66 @@ public class ErrorHandler {
 
     @ExceptionHandler(WebExchangeBindException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleWebExchangeBindException(WebExchangeBindException e) {
-        log.warn("Validation error in request: {}", e.getMessage(), e);
+    public ErrorResponse handleWebExchangeBindException(WebExchangeBindException ex) {
+        String description = ex.getFieldErrors().stream()
+                .map(error -> "%s: %s".formatted(
+                        error.getField(),
+                        error.getDefaultMessage()))
+                .collect(Collectors.joining("; "));
 
-        List<String> errors = e.getFieldErrors()
-                .stream()
-                .map(error ->
-                        "%s: %s".formatted(
-                                error.getField(),
-                                error.getDefaultMessage()))
-                .toList();
+        if (description.isBlank()) {
+            description = ex.getMessage();
+        }
+
+        log.warn("Validation failed: {}", description);
 
         return new ErrorResponse(
                 "Validation failed",
-                errors.isEmpty() ? e.getMessage(): String.join("; ", errors)
+                description
         );
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleIllegalArgumentException(IllegalArgumentException e) {
-        log.warn("Invalid argument: {}", e.getMessage());
+    public ErrorResponse handleIllegalArgumentException(IllegalArgumentException ex) {
+        log.warn("Invalid argument: {}", ex.getMessage());
 
         return new ErrorResponse(
                 "Invalid argument",
-                e.getMessage()
+                ex.getMessage()
         );
     }
 
     @ExceptionHandler(ServerWebInputException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleServerWebInputException(ServerWebInputException e) {
-        log.warn("Invalid request parameter: {}", e.getMessage(), e);
+    public ErrorResponse handleServerWebInputException(ServerWebInputException ex) {
+        String description = ex.getReason() != null
+                ? ex.getReason()
+                : ex.getMessage();
+
+        log.warn("Bad request: {}", description);
 
         return new ErrorResponse(
                 "Bad request",
-                e.getReason() != null ? e.getReason() : e.getMessage()
+                description
         );
     }
 
     @ExceptionHandler(RuntimeException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ErrorResponse handleRuntimeException(RuntimeException e) {
+    public ErrorResponse handleRuntimeException(RuntimeException ex) {
         boolean isDevelopment = environment.acceptsProfiles(Profiles.of("dev", "test"));
 
         if (isDevelopment) {
-            log.warn("Development environment error", e);
+            log.error("Unexpected error", ex);
 
             return new ErrorResponse(
                     "Internal server error",
-                    e.getMessage() != null ? e.getMessage() : "No message"
+                    Objects.requireNonNullElse(ex.getMessage(), "No message")
             );
         }
 
-        log.error("Internal server error", e);
+        log.error("Unexpected error", ex);
 
         return new ErrorResponse(
                 "Internal server error",
