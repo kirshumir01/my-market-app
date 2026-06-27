@@ -15,8 +15,6 @@ import ru.yandex.practicum.dto.request.CartRequest;
 import ru.yandex.practicum.mapper.CartRequestMapper;
 import ru.yandex.practicum.service.CartService;
 
-import java.math.BigDecimal;
-
 @Controller
 @AllArgsConstructor
 public class CartController {
@@ -26,34 +24,17 @@ public class CartController {
     private final PaymentClient paymentClient;
 
     @GetMapping("/cart/items")
-    public Mono<Rendering> getCart(
-            @RequestParam(defaultValue = "false") boolean paymentError
-    ) {
-        return cartService.getCart()
-                .flatMap(cart -> paymentClient.getBalance()
-                                .map(balance -> {
-                                    boolean canOrder = balance.getBalance()
-                                            .compareTo(BigDecimal.valueOf(cart.getTotal())) >= 0;
-
-                                    return Rendering.view("cart")
-                                            .modelAttribute("items", cart.getItems())
-                                            .modelAttribute("total", cart.getTotal())
-                                            .modelAttribute("balance", balance.getBalance())
-                                            .modelAttribute("currency", balance.getCurrency())
-                                            .modelAttribute("canOrder", canOrder)
-                                            .modelAttribute("paymentError", paymentError)
-                                            .modelAttribute("paymentServiceError", false)
-                                            .build();
-                                })
-                        .onErrorResume(ex -> Mono.just(Rendering.view("cart")
-                                .modelAttribute("items", cart.getItems())
-                                .modelAttribute("total", cart.getTotal())
-                                .modelAttribute("balance", null)
-                                .modelAttribute("currency", "RUB")
-                                .modelAttribute("canOrder", false)
-                                .modelAttribute("paymentError", paymentError)
-                                .modelAttribute("paymentServiceError", true)
-                                .build())));
+    public Mono<Rendering> getCart(@RequestParam(defaultValue = "false") boolean paymentError) {
+        return cartService.getCartView(paymentError)
+                .map(view -> Rendering.view("cart")
+                        .modelAttribute("items", view.getItems())
+                        .modelAttribute("total", view.getTotal())
+                        .modelAttribute("balance", view.getBalance())
+                        .modelAttribute("currency", view.getCurrency())
+                        .modelAttribute("canOrder", view.isCanOrder())
+                        .modelAttribute("paymentError", view.isPaymentError())
+                        .modelAttribute("paymentServiceError", view.isPaymentServiceError())
+                        .build());
     }
 
     @PostMapping("/cart/items")
