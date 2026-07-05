@@ -1,8 +1,10 @@
-package ru.yandex.practicum.purchases.controller;
+package ru.yandex.practicum.controller;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientRepository;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
@@ -23,10 +25,14 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.csrf;
+import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.mockUser;
 
 class PurchaseControllerIntegrationTest extends TestDataConfiguration {
+
+    private static final String USERNAME = "user";
+    private static final long USER_ID = 1L;
 
     @Autowired
     private WebTestClient webTestClient;
@@ -43,9 +49,15 @@ class PurchaseControllerIntegrationTest extends TestDataConfiguration {
     @MockitoBean
     private PaymentClient paymentClient;
 
+    @MockitoBean
+    ReactiveClientRegistrationRepository clientRegistrationRepository;
+
+    @MockitoBean
+    ServerOAuth2AuthorizedClientRepository authorizedClientRepository;
+
     @Test
-    @DisplayName("POST /buy -> 3xx Redirect to /orders/{id}?newOrder=true and clear cart")
-    void createOrderFromCart_shouldClearCartAfterOrderCreation() {
+    @DisplayName("POST /buy -> redirect to /orders/{id}?newOrder=true and clear current user's cart")
+    void createOrderFromCart_shouldClearCurrentUserCartAfterOrderCreation() {
         when(itemCacheService.getItemCardCached(1L)).thenReturn(Mono.empty());
         when(itemCacheService.getItemCardCached(2L)).thenReturn(Mono.empty());
 
@@ -63,19 +75,22 @@ class PurchaseControllerIntegrationTest extends TestDataConfiguration {
                         Instant.now()
                 )));
 
-        assertThat(getCartItems()).isNotEmpty();
+        assertThat(getUserCartItems()).isNotEmpty();
 
         Long ordersCountBefore = orderRepository.count().block();
         assertThat(ordersCountBefore).isNotNull();
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(mockUser(USERNAME))
+                .mutateWith(csrf())
+                .post()
                 .uri("/buy")
                 .exchange()
-                .expectStatus().is3xxRedirection()
+                .expectStatus().isSeeOther()
                 .expectHeader()
                 .valueMatches("Location", "/orders/\\d+\\?newOrder=true");
 
-        assertThat(getCartItems()).isEmpty();
+        assertThat(getUserCartItems()).isEmpty();
 
         Long ordersCountAfter = orderRepository.count().block();
 
@@ -86,8 +101,8 @@ class PurchaseControllerIntegrationTest extends TestDataConfiguration {
     }
 
     @Test
-    @DisplayName("POST /buy -> 3xx Redirect to /cart/items?paymentError=true when payment fails")
-    void createOrderFromCart_whenPaymentFailed_shouldRedirectToCartAndKeepCart() {
+    @DisplayName("POST /buy -> redirect to /cart/items?paymentError=true when payment fails")
+    void createOrderFromCart_whenPaymentFailed_shouldRedirectToCartAndKeepCurrentUserCart() {
         when(itemCacheService.getItemCardCached(1L)).thenReturn(Mono.empty());
         when(itemCacheService.getItemCardCached(2L)).thenReturn(Mono.empty());
 
@@ -106,25 +121,42 @@ class PurchaseControllerIntegrationTest extends TestDataConfiguration {
                 )));
 
         Long ordersCountBefore = orderRepository.count().block();
-        int cartSizeBefore = getCartItems().size();
+        int cartSizeBefore = getUserCartItems().size();
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(mockUser(USERNAME))
+                .mutateWith(csrf())
+                .post()
                 .uri("/buy")
                 .exchange()
-                .expectStatus().is3xxRedirection()
+                .expectStatus().isSeeOther()
                 .expectHeader()
                 .valueEquals("Location", "/cart/items?paymentError=true");
 
         Long ordersCountAfter = orderRepository.count().block();
 
         assertThat(ordersCountAfter).isEqualTo(ordersCountBefore);
-        assertThat(getCartItems()).hasSize(cartSizeBefore);
+        assertThat(getUserCartItems()).hasSize(cartSizeBefore);
 
         verify(paymentClient).makePayment(any(PaymentRequestDto.class));
     }
 
-    private List<CartItem> getCartItems() {
-        return cartItemRepository.findAll()
+    @Test
+    @DisplayName("POST /buy anonymous -> redirect to login")
+    void createOrderFromCartWithoutAuthentication_shouldRedirectToLogin() {
+        webTestClient
+                .mutateWith(csrf())
+                .post()
+                .uri("/buy")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueMatches("Location", ".*/login");
+
+        verifyNoInteractions(paymentClient);
+    }
+
+    private List<CartItem> getUserCartItems() {
+        return cartItemRepository.findAllByUserId(USER_ID)
                 .collectList()
                 .block();
     }

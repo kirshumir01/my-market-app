@@ -21,9 +21,16 @@ public abstract class TestDataConfiguration extends TestContainersConfiguration 
         databaseClient.sql("DELETE FROM cart_items").then().block();
         databaseClient.sql("DELETE FROM orders").then().block();
         databaseClient.sql("DELETE FROM items").then().block();
+        databaseClient.sql("DELETE FROM users").then().block();
     }
 
     private void insertTestData() {
+        databaseClient.sql("""
+                INSERT INTO users (id, username, password, enabled, role) VALUES
+                (1, 'user', '$2a$10$dummyPasswordHashForTests', TRUE, 'USER'),
+                (2, 'other-user', '$2a$10$dummyPasswordHashForTests', TRUE, 'USER')
+                """).then().block();
+
         databaseClient.sql("""
                 INSERT INTO items (id, title, description, img_path, price) VALUES
                 (1, 'Test item_1 title', 'Test item_1 description', NULL, 999),
@@ -35,9 +42,9 @@ public abstract class TestDataConfiguration extends TestContainersConfiguration 
                 """).then().block();
 
         databaseClient.sql("""
-                INSERT INTO orders (id, total_sum) VALUES
-                (1, 4997),
-                (2, 23997)
+                INSERT INTO orders (id, total_sum, user_id) VALUES
+                (1, 4997, 1),
+                (2, 23997, 1)
                 """).then().block();
 
         databaseClient.sql("""
@@ -48,16 +55,18 @@ public abstract class TestDataConfiguration extends TestContainersConfiguration 
                 """).then().block();
 
         databaseClient.sql("""
-                INSERT INTO cart_items(id, item_id, count) VALUES
-                (1, 1, 2),
-                (2, 2, 5)
+                INSERT INTO cart_items(id, user_id, item_id, count) VALUES
+                (1, 1, 1, 2),
+                (2, 1, 2, 5),
+                (3, 2, 3, 1)
                 """).then().block();
     }
 
     private void restartSequences() {
+        databaseClient.sql("ALTER TABLE users ALTER COLUMN id RESTART WITH 3").then().block();
         databaseClient.sql("ALTER TABLE items ALTER COLUMN id RESTART WITH 7").then().block();
         databaseClient.sql("ALTER TABLE orders ALTER COLUMN id RESTART WITH 3").then().block();
         databaseClient.sql("ALTER TABLE orders_items ALTER COLUMN id RESTART WITH 4").then().block();
-        databaseClient.sql("ALTER TABLE cart_items ALTER COLUMN id RESTART WITH 3").then().block();
+        databaseClient.sql("ALTER TABLE cart_items ALTER COLUMN id RESTART WITH 4").then().block();
     }
 }

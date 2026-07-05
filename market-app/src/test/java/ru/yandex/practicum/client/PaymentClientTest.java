@@ -2,6 +2,7 @@ package ru.yandex.practicum.client;
 
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,7 +17,7 @@ import ru.yandex.practicum.dto.payment.PaymentStatus;
 import java.io.IOException;
 import java.math.BigDecimal;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentClientTest {
@@ -42,52 +43,60 @@ class PaymentClientTest {
     }
 
     @Test
-    @DisplayName("getBalance() -> returns current account balance")
-    void getBalance_shouldReturnBalance() {
+    @DisplayName("getBalance(userId) -> sends GET /api/v1/balance/{userId} and returns balance")
+    void getBalance_shouldReturnBalance() throws InterruptedException {
+        Long userId = 1L;
+
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
                 .setBody("""
-                        {
-                          "balance": 10000.00,
-                          "currency": "RUB"
-                        }
-                        """));
+                    {
+                      "balance": 10000.00,
+                      "currency": "RUB"
+                    }
+                    """));
 
-        StepVerifier.create(paymentClient.getBalance())
+        StepVerifier.create(paymentClient.getBalance(userId))
                 .assertNext(response -> {
-                    assertThat(response.getBalance())
-                            .isEqualByComparingTo("10000.00");
+                    assertThat(response.getBalance()).isEqualByComparingTo("10000.00");
                     assertThat(response.getCurrency()).isEqualTo("RUB");
                 })
                 .verifyComplete();
+
+        RecordedRequest request = mockWebServer.takeRequest();
+
+        assertThat(request.getMethod()).isEqualTo("GET");
+        assertThat(request.getPath()).isEqualTo("/api/v1/balance/1");
     }
 
     @Test
-    @DisplayName("makePayment() -> returns successful payment response")
-    void makePayment_shouldReturnPaymentResponse() {
+    @DisplayName("makePayment() -> sends POST /api/v1/payments and returns payment response")
+    void makePayment_shouldReturnPaymentResponse() throws InterruptedException {
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
                 .setBody("""
-                        {
-                          "orderId": null,
-                          "status": "PAID",
-                          "amount": 2499.90,
-                          "remainingBalance": 7500.10,
-                          "currency": "RUB",
-                          "message": "Payment completed successfully",
-                          "paymentTime": "2026-06-23T12:30:00Z"
-                        }
-                        """));
+                    {
+                      "orderId": null,
+                      "userId": 1,
+                      "status": "PAID",
+                      "amount": 2499.90,
+                      "remainingBalance": 7500.10,
+                      "currency": "RUB",
+                      "message": "Payment completed successfully",
+                      "paymentTime": "2026-06-23T12:30:00Z"
+                    }
+                    """));
 
-        PaymentRequestDto request = new PaymentRequestDto(
+        PaymentRequestDto requestDto = new PaymentRequestDto(
                 null,
+                1L,
                 BigDecimal.valueOf(2499.90),
                 "RUB"
         );
 
-        StepVerifier.create(paymentClient.makePayment(request))
+        StepVerifier.create(paymentClient.makePayment(requestDto))
                 .assertNext(response -> {
                     assertThat(response.getStatus()).isEqualTo(PaymentStatus.PAID);
                     assertThat(response.getAmount()).isEqualByComparingTo("2499.90");
@@ -95,5 +104,17 @@ class PaymentClientTest {
                     assertThat(response.getCurrency()).isEqualTo("RUB");
                 })
                 .verifyComplete();
+
+        RecordedRequest request = mockWebServer.takeRequest();
+
+        assertThat(request.getMethod()).isEqualTo("POST");
+        assertThat(request.getPath()).isEqualTo("/api/v1/payments");
+        assertThat(request.getHeader("Content-Type")).contains("application/json");
+
+        assertThat(request.getBody().readUtf8())
+                .contains("\"orderId\":null")
+                .contains("\"userId\":1")
+                .contains("\"amount\":2499.9")
+                .contains("\"currency\":\"RUB\"");
     }
 }

@@ -1,4 +1,4 @@
-package ru.yandex.practicum.items.repository;
+package ru.yandex.practicum.repository;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -6,9 +6,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientRepository;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import ru.yandex.practicum.config.TestDataConfiguration;
 import ru.yandex.practicum.model.Item;
-import ru.yandex.practicum.repository.ItemRepository;
 
 import java.util.List;
 
@@ -18,6 +20,12 @@ class ItemRepositoryTest extends TestDataConfiguration {
 
     @Autowired
     ItemRepository itemRepository;
+
+    @MockitoBean
+    ReactiveClientRegistrationRepository clientRegistrationRepository;
+
+    @MockitoBean
+    ServerOAuth2AuthorizedClientRepository authorizedClientRepository;
 
     @Test
     @DisplayName("Search items -> returns pageable results sorted by price")
@@ -120,5 +128,30 @@ class ItemRepositoryTest extends TestDataConfiguration {
 
         assertThat(totalElements).isNotNull();
         assertThat(totalElements).isZero();
+    }
+
+    @Test
+    @DisplayName("findAllBy(pageable) -> returns pageable items sorted by price")
+    void findAllBy_shouldReturnPageableItemsSortedByPrice() {
+        Pageable pageable = PageRequest.of(0, 3, Sort.by("price").ascending());
+
+        List<Item> result = itemRepository.findAllBy(pageable)
+                .collectList()
+                .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result).hasSize(3);
+
+        assertThat(result)
+                .extracting(Item::getTitle)
+                .containsExactly(
+                        "Test item_1 title",
+                        "Test item_2 title",
+                        "Test item_4 title"
+                );
+
+        assertThat(result)
+                .extracting(Item::getPrice)
+                .containsExactly(999L, 2999L, 4999L);
     }
 }
