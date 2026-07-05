@@ -17,15 +17,18 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
-    @GetMapping("/balance")
-    public Mono<BalanceResponseDto> getBalance() {
-        return paymentService.getBalance();
+    @GetMapping("/balance/{userId}")
+    public Mono<BalanceResponseDto> getBalance(
+            @PathVariable Long userId
+    ) {
+        return paymentService.getBalance(userId);
     }
 
     @PostMapping("/payments")
     public Mono<ResponseEntity<PaymentResponseDto>> makePayment(
             @Valid @RequestBody PaymentRequestDto request
     ) {
-        return paymentService.makePayment(request).map(ResponseEntity::ok);
+        return paymentService.makePayment(request)
+                .map(ResponseEntity::ok);
     }
 }

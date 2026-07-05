@@ -10,6 +10,8 @@ import ru.yandex.practicum.dto.PaymentStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -17,8 +19,8 @@ import java.util.concurrent.locks.ReentrantLock;
 public class PaymentServiceImpl implements PaymentService {
 
     private final String currency;
-    private final AtomicReference<BigDecimal> balance;
-
+    private final BigDecimal initialBalance;
+    private final Map<Long, BigDecimal> balances = new ConcurrentHashMap<>();
     private final ReentrantLock paymentLock = new ReentrantLock();
 
     public PaymentServiceImpl(
@@ -26,16 +28,15 @@ public class PaymentServiceImpl implements PaymentService {
             @Value("${payment.balance.initial}") BigDecimal initialBalance
     ) {
         this.currency = currency;
-        this.balance = new AtomicReference<>(initialBalance);
+        this.initialBalance = initialBalance;
     }
 
     @Override
-    public Mono<BalanceResponseDto> getBalance() {
-        return Mono.just(
-                new BalanceResponseDto(
-                        balance.get(),
-                        currency)
-        );
+    public Mono<BalanceResponseDto> getBalance(long userId) {
+        return Mono.fromSupplier(() -> new BalanceResponseDto(
+                balances.getOrDefault(userId, initialBalance),
+                currency
+        ));
     }
 
     @Override
@@ -47,23 +48,28 @@ public class PaymentServiceImpl implements PaymentService {
         paymentLock.lock();
 
         try {
-            Instant paymentTime = Instant.now();
-            BigDecimal currentBalance = balance.get();
+            Long userId = request.getUserId();
+
+            BigDecimal currentBalance = balances.getOrDefault(
+                    userId,
+                    initialBalance
+            );
 
             if (currentBalance.compareTo(request.getAmount()) < 0) {
                 return new PaymentResponseDto(
-                                request.getOrderId(),
-                                PaymentStatus.FAILED,
-                                request.getAmount(),
-                                currentBalance,
-                                request.getCurrency(),
-                                "Not enough money on balance",
-                                paymentTime
+                        request.getOrderId(),
+                        PaymentStatus.FAILED,
+                        request.getAmount(),
+                        currentBalance,
+                        request.getCurrency(),
+                        "Not enough money on balance",
+                        Instant.now()
                 );
             }
 
             BigDecimal remainingBalance = currentBalance.subtract(request.getAmount());
-            balance.set(remainingBalance);
+
+            balances.put(userId, remainingBalance);
 
             return new PaymentResponseDto(
                     request.getOrderId(),
@@ -72,7 +78,7 @@ public class PaymentServiceImpl implements PaymentService {
                     remainingBalance,
                     request.getCurrency(),
                     "Payment completed successfully",
-                    paymentTime
+                    Instant.now()
             );
         } finally {
             paymentLock.unlock();
