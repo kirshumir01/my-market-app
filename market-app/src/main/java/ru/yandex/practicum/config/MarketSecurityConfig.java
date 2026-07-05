@@ -38,6 +38,9 @@ public class MarketSecurityConfig {
                         .pathMatchers("/images/**", "/css/**", "/favicon.ico").permitAll()
                         .pathMatchers(HttpMethod.GET, "/", "/items", "/items/{id}").permitAll()
                         .pathMatchers(HttpMethod.GET, "/login").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/items/new").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.POST, "/items/new").hasRole("ADMIN")
+
                         .pathMatchers(HttpMethod.POST, "/items", "/items/**").authenticated()
                         .pathMatchers("/cart/**", "/orders/**", "/buy").authenticated()
                         .anyExchange().authenticated()

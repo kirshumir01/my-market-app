@@ -76,7 +76,7 @@
 
                     <h3 class="mb-4">Добавить товар</h3>
 
-                    <form sec:authorize="hasRole('ADMIN')"
+                    <form th:if="${isAdmin}"
                           method="post"
                           th:action="@{/items/new}">
                         <input type="hidden"

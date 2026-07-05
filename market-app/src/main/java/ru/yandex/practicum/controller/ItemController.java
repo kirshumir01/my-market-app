@@ -68,13 +68,9 @@ public class ItemController {
     @GetMapping("/items/new")
     @PreAuthorize("hasRole('ADMIN')")
     public Mono<Rendering> newItemForm(Authentication authentication) {
-
-        boolean isAdmin = authentication != null
-                && authentication.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
 
         return Mono.just(Rendering.view("item-add-form")
-                .modelAttribute("item", new ItemRequest())
                 .modelAttribute("isAdmin", isAdmin)
                 .build());
     }
