@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebInputException;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -90,7 +91,11 @@ public class ErrorHandler {
         return new ErrorResponse("Bad request", e.getMessage());
     }
 
-
+    @ExceptionHandler(UnauthorizedException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Mono<ErrorResponse> handleUnauthorized(UnauthorizedException e) {
+        return Mono.just(new ErrorResponse("Unauthorized", e.getMessage()));
+    }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException e) {
