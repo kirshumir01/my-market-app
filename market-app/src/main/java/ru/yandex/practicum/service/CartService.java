@@ -7,9 +7,9 @@ import ru.yandex.practicum.model.CartAction;
 
 public interface CartService {
 
-    Mono<CartDto> getCart();
+    Mono<CartDto> getCart(String username);
 
-    Mono<Void> changeItemsCount(long itemId, CartAction action);
+    Mono<Void> changeItemsCount(String username, long itemId, CartAction action);
 
-    Mono<CartViewDto> getCartView(boolean paymentError);
+    Mono<CartViewDto> getCartView(String username, boolean paymentError);
 }
