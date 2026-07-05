@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<html lang="en"
+      xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="https://www.thymeleaf.org/extras/spring-security">
 
 <head>
     <meta charset="utf-8">
@@ -14,15 +16,62 @@
             <div class="col">
                 <div class="hstack gap-3">
                     <h2>
-                        <a href="/items"
+                        <a th:href="@{/items}"
                            class="badge text-bg-success text-decoration-none">
                             Витрина магазина
                         </a>
                     </h2>
-                    <a href="/items/new" class="btn btn-success bi bi-plus-circle"> Новый товар</a>
-                    <a href="/orders" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
-                    <a href="/cart/items" class="btn btn-secondary bi bi-cart4"> Корзина</a>
-                    <a href="/items" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
+
+                    <div class="small text-secondary">
+                        <span sec:authorize="isAuthenticated()">
+                            Пользователь:
+                            <strong sec:authentication="name"></strong>
+                        </span>
+
+                        <span sec:authorize="isAnonymous()">
+                            guest (unauthorized)
+                        </span>
+                    </div>
+
+                    <a th:href="@{/login}"
+                       class="btn btn-outline-primary">
+                        Войти
+                    </a>
+
+                    <form sec:authorize="isAuthenticated()"
+                          method="post"
+                          th:action="@{/logout}"
+                          class="mb-0">
+                        <input type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <button type="submit"
+                                class="btn btn-outline-secondary">
+                            Выйти
+                        </button>
+                    </form>
+
+                    <a th:if="${isAdmin}"
+                       th:href="@{/items/new}"
+                       class="btn btn-success">
+                        <i class="bi bi-plus-circle"></i>
+                        Новый товар
+                    </a>
+
+                    <a sec:authorize="isAuthenticated()"
+                       th:href="@{/orders}"
+                       class="btn btn-secondary ms-auto">
+                        <i class="bi bi-file-earmark-text"></i>
+                        Заказы
+                    </a>
+
+                    <a sec:authorize="isAuthenticated()"
+                       th:href="@{/cart/items}"
+                       class="btn btn-secondary">
+                        <i class="bi bi-cart4"></i>
+                        Корзина
+                    </a>
                 </div>
             </div>
         </div>
@@ -40,7 +89,13 @@
                             <span class="badge text-bg-success justify-content-end" th:text="${item.price}+' руб.'"></span>
                         </h5>
                         <p class="card-text" th:text="${item.description}"></p>
-                        <form th:action="@{/items/{id}(id=${item.id})}" method="post">
+                        <form sec:authorize="isAuthenticated()"
+                              method="post"
+                              th:action="@{/items/{id}(id=${item.id})}">
+                            <input type="hidden"
+                                   th:name="${_csrf.parameterName}"
+                                   th:value="${_csrf.token}">
+
                             <div class="hstack gap-3">
                                 <button type="submit"
                                         class="btn btn-outline-secondary"
@@ -63,8 +118,10 @@
                                         class="btn btn-warning ms-auto bi bi-cart4"
                                         name="action"
                                         value="PLUS"
-                                        th:if="${item.count == 0}">
+                                        th:if="${item.count == 0}"
+                                        aria-label="Добавить в корзину">
                                 </button>
+                            </div>
                         </form>
                     </div>
                 </div>

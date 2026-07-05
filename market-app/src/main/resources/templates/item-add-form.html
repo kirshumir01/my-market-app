@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<html lang="en"
+      xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="https://www.thymeleaf.org/extras/spring-security">
 
 <head>
     <meta charset="utf-8">
@@ -17,23 +19,49 @@
 <body class="bg-light">
 <div class="container p-2">
 
-    <!-- Верхняя панель -->
     <div class="row p-2">
         <div class="col">
             <div class="hstack gap-3">
                 <h2>
-                    <a href="/items"
+                    <a th:href="@{/items}"
                        class="badge text-bg-success text-decoration-none">
                         Витрина магазина
                     </a>
                 </h2>
 
-                <a href="/orders"
+                <div class="small text-secondary">
+                    <span sec:authorize="isAuthenticated()">
+                        Пользователь:
+                        <strong sec:authentication="name"></strong>
+                    </span>
+
+                    <span sec:authorize="isAnonymous()">
+                        guest (unauthorized)
+                    </span>
+                </div>
+
+                <form sec:authorize="isAuthenticated()"
+                      method="post"
+                      th:action="@{/logout}"
+                      class="mb-0">
+                    <input type="hidden"
+                           th:name="${_csrf.parameterName}"
+                           th:value="${_csrf.token}">
+
+                    <button type="submit"
+                            class="btn btn-outline-secondary">
+                        Выйти
+                    </button>
+                </form>
+
+                <a sec:authorize="isAuthenticated()"
+                   th:href="@{/orders}"
                    class="btn btn-secondary ms-auto bi bi-file-earmark-text">
                     Заказы
                 </a>
 
-                <a href="/cart/items"
+                <a sec:authorize="isAuthenticated()"
+                   th:href="@{/cart/items}"
                    class="btn btn-secondary bi bi-cart4">
                     Корзина
                 </a>
@@ -41,7 +69,6 @@
         </div>
     </div>
 
-    <!-- Форма -->
     <div class="row p-2">
         <div class="col">
             <div class="card">
@@ -49,9 +76,12 @@
 
                     <h3 class="mb-4">Добавить товар</h3>
 
-                    <form th:action="@{/items/new}"
+                    <form sec:authorize="hasRole('ADMIN')"
                           method="post"
-                          th:object="${item}">
+                          th:action="@{/items/new}">
+                        <input type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
 
                         <div class="mb-3">
                             <label class="form-label">
@@ -99,7 +129,7 @@
                         </button>
 
                         <a class="btn btn-secondary"
-                           href="/items">
+                           th:href="@{/items}">
                             Отмена
                         </a>
                     </form>

@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<html lang="en"
+      xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="https://www.thymeleaf.org/extras/spring-security">
 
 <head>
     <meta charset="utf-8">
@@ -14,16 +16,66 @@
     <div class="container p-2">
         <div class="row p-2">
             <div class="col">
-                <div class="hstack gap-3">
-                    <h2>
-                        <a href="/items"
-                           class="badge text-bg-success text-decoration-none">
-                            Витрина магазина
+                <div class="col">
+                    <div class="hstack gap-3">
+                        <h2>
+                            <a th:href="@{/items}"
+                               class="badge text-bg-success text-decoration-none">
+                                Витрина магазина
+                            </a>
+                        </h2>
+
+                        <div class="small text-secondary">
+                            <span sec:authorize="isAuthenticated()">
+                                Пользователь:
+                                <strong sec:authentication="name"></strong>
+                            </span>
+
+                            <span sec:authorize="isAnonymous()">
+                                guest (unauthorized)
+                            </span>
+                        </div>
+
+                        <a th:href="@{/login}"
+                           class="btn btn-outline-primary">
+                            Войти
                         </a>
-                    </h2>
-                    <a href="/items/new" class="btn btn-success bi bi-plus-circle"> Новый товар</a>
-                    <a href="/orders" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
-                    <a href="/cart/items" class="btn btn-secondary bi bi-cart4"> Корзина</a>
+
+                        <form sec:authorize="isAuthenticated()"
+                              method="post"
+                              th:action="@{/logout}"
+                              class="mb-0">
+                            <input type="hidden"
+                                   th:name="${_csrf.parameterName}"
+                                   th:value="${_csrf.token}">
+
+                            <button type="submit"
+                                    class="btn btn-outline-secondary">
+                                Выйти
+                            </button>
+                        </form>
+
+                        <a th:if="${isAdmin}"
+                           th:href="@{/items/new}"
+                           class="btn btn-success">
+                            <i class="bi bi-plus-circle"></i>
+                            Новый товар
+                        </a>
+
+                        <a sec:authorize="isAuthenticated()"
+                           th:href="@{/orders}"
+                           class="btn btn-secondary ms-auto">
+                            <i class="bi bi-file-earmark-text"></i>
+                            Заказы
+                        </a>
+
+                        <a sec:authorize="isAuthenticated()"
+                           th:href="@{/cart/items}"
+                           class="btn btn-secondary">
+                            <i class="bi bi-cart4"></i>
+                            Корзина
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -33,7 +85,7 @@
                     <input class="form-control me-2 mw-100" type="search" placeholder="Найти..." aria-label="Поиск" name="search" th:value="${search}" form="main"/>
                     <button class="btn btn-outline-success" type="submit" form="main">Найти</button>
                     <div class="form-floating w-25">
-                        <select class="form-select" id="sort" name="sort" onchange="document.ElementById('main').submit()" form="main">
+                        <select class="form-select" id="sort" name="sort" onchange="document.getElementById('main').submit()" form="main">
                             <option value="NO" th:selected="${sort=='NO'}">нет</option>
                             <option value="ALPHA" th:selected="${sort=='ALPHA'}">по алфавиту</option>
                             <option value="PRICE" th:selected="${sort=='PRICE'}">по цене</option>
@@ -57,7 +109,7 @@
         <div class="row p-2" th:each="itemsRow : ${items}">
             <div class="col" th:each="item : ${itemsRow}">
                 <div class="card" th:if="${item.id != -1}">
-                    <a th:href="${'/items/'+item.id}">
+                    <a th:href="@{/items/{id}(id=${item.id})}">
                         <img th:src="@{/{imgPath}(imgPath=${item.imgPath})}" class="card-img-top" alt="Нет изображения">
                     </a>
                     <div class="card-body">
@@ -66,7 +118,12 @@
                             <span class="badge text-bg-success justify-content-end" th:text="${item.price}+' руб.'"></span>
                         </h5>
                         <p class="card-text" th:text="${item.description}"></p>
-                        <form method="post" th:action="@{/items}">
+                        <form sec:authorize="isAuthenticated()"
+                              method="post"
+                              th:action="@{/items}">
+                            <input type="hidden"
+                                   th:name="${_csrf.parameterName}"
+                                   th:value="${_csrf.token}">
                             <div class="hstack gap-3">
                                 <input type="hidden" name="id" th:value="${item.id}">
                                 <input type="hidden" name="search" th:value="${search}">
@@ -94,7 +151,8 @@
                                         class="btn btn-warning ms-auto bi bi-cart4"
                                         name="action"
                                         value="PLUS"
-                                        th:if="${item.count == 0}">
+                                        th:if="${item.count == 0}"
+                                        aria-label="Добавить в корзину">
                                 </button>
                             </div>
                         </form>
