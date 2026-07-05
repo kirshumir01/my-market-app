@@ -14,14 +14,8 @@ import ru.yandex.practicum.dto.payment.PaymentStatus;
 import ru.yandex.practicum.exception.BadRequestException;
 import ru.yandex.practicum.exception.NotFoundException;
 import ru.yandex.practicum.mapper.OrderMapper;
-import ru.yandex.practicum.model.CartItem;
-import ru.yandex.practicum.model.Item;
-import ru.yandex.practicum.model.Order;
-import ru.yandex.practicum.model.OrderItem;
-import ru.yandex.practicum.repository.CartItemRepository;
-import ru.yandex.practicum.repository.ItemRepository;
-import ru.yandex.practicum.repository.OrderItemRepository;
-import ru.yandex.practicum.repository.OrderRepository;
+import ru.yandex.practicum.model.*;
+import ru.yandex.practicum.repository.*;
 import ru.yandex.practicum.service.OrderService;
 
 import java.math.BigDecimal;
@@ -32,24 +26,29 @@ import java.util.List;
 @AllArgsConstructor
 public class OrderServiceImpl implements OrderService {
 
+    private static final String DEFAULT_CURRENCY = "RUB";
+
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final CartItemRepository cartItemRepository;
     private final ItemRepository itemRepository;
     private final PaymentClient paymentClient;
     private final ItemCacheService cacheService;
+    private final UserRepository userRepository;
 
     @Override
     @Transactional(readOnly = true)
-    public Flux<OrderDto> getOrders() {
-        return orderRepository.findAllOrders()
-                .flatMap(this::toOrderDto);
+    public Flux<OrderDto> getOrders(String username) {
+        return getUserId(username)
+                .flatMapMany(userId -> orderRepository.findAllByUserIdOrderByIdAsc(userId)
+                        .flatMap(this::toOrderDto));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Mono<OrderDto> getOrder(long orderId) {
-        return orderRepository.findOrderById(orderId)
+    public Mono<OrderDto> getOrder(String username, long orderId) {
+        return getUserId(username)
+                .flatMap(userId -> orderRepository.findByIdAndUserId(orderId, userId))
                 .switchIfEmpty(Mono.error(
                         new NotFoundException("Order with id = %d not found".formatted(orderId))
                 ))
@@ -58,10 +57,19 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public Mono<Long> createOrderFromCart() {
-        return getCartItemsWithCards()
-                .flatMap(items -> makePayment(items)
-                        .then(saveOrder(items)));
+    public Mono<Long> createOrderFromCart(String username) {
+        return getUserId(username)
+                .flatMap(userId -> getCartItemsWithCards(userId)
+                        .flatMap(items -> makePayment(userId, items)
+                                .then(Mono.defer(() -> saveOrder(userId, items)))));
+    }
+
+    private Mono<Long> getUserId(String username) {
+        return userRepository.findByUsername(username)
+                .switchIfEmpty(Mono.error(
+                        new NotFoundException("User with username = %s not found".formatted(username))
+                ))
+                .map(User::getId);
     }
 
     private Mono<OrderDto> toOrderDto(Order order) {
@@ -83,8 +91,8 @@ public class OrderServiceImpl implements OrderService {
                 });
     }
 
-    private Mono<List<CartItemWithCard>> getCartItemsWithCards() {
-        return cartItemRepository.findAll()
+    private Mono<List<CartItemWithCard>> getCartItemsWithCards(long userId) {
+        return cartItemRepository.findAllByUserId(userId)
                 .collectList()
                 .flatMap(cartItems -> {
                     if (cartItems.isEmpty()) {
@@ -102,13 +110,17 @@ public class OrderServiceImpl implements OrderService {
                 .map(itemCard -> new CartItemWithCard(cartItem, itemCard));
     }
 
-    private Mono<Void> makePayment(List<CartItemWithCard> items) {
+    private Mono<Void> makePayment(
+            Long userId,
+            List<CartItemWithCard> items
+    ) {
         long totalSum = calculateTotalSum(items);
 
         PaymentRequestDto paymentRequest = new PaymentRequestDto(
                 null,
+                userId,
                 BigDecimal.valueOf(totalSum),
-                "RUB"
+                DEFAULT_CURRENCY
         );
 
         return paymentClient.makePayment(paymentRequest)
@@ -121,18 +133,19 @@ public class OrderServiceImpl implements OrderService {
                 });
     }
 
-    private Mono<Long> saveOrder(List<CartItemWithCard> items) {
+    private Mono<Long> saveOrder(long userId, List<CartItemWithCard> items) {
         long totalSum = calculateTotalSum(items);
 
         Order order = new Order(
                 null,
+                userId,
                 totalSum,
                 LocalDateTime.now()
         );
 
         return orderRepository.save(order)
                 .flatMap(savedOrder -> saveOrderItems(savedOrder, items)
-                        .then(clearCart())
+                        .then(clearCart(userId))
                         .thenReturn(savedOrder.getId()));
     }
 
@@ -154,8 +167,8 @@ public class OrderServiceImpl implements OrderService {
         );
     }
 
-    private Mono<Void> clearCart() {
-        return cartItemRepository.deleteAll();
+    private Mono<Void> clearCart(long userId) {
+        return cartItemRepository.deleteAllByUserId(userId);
     }
 
     private long calculateTotalSum(List<CartItemWithCard> items) {
