@@ -13,14 +13,15 @@ public interface OrderRepository extends ReactiveCrudRepository<Order, Long> {
     @Query("""
             SELECT *
             FROM orders
+            WHERE user_id = :userId
             ORDER BY id ASC
             """)
-    Flux<Order> findAllOrders();
+    Flux<Order> findAllByUserIdOrderByIdAsc(long userId);
 
     @Query("""
             SELECT *
             FROM orders
-            WHERE id = :orderId
+            WHERE id = :orderId AND user_id = :userId
             """)
-    Mono<Order> findOrderById(long orderId);
+    Mono<Order> findByIdAndUserId(long orderId, long userId);
 }

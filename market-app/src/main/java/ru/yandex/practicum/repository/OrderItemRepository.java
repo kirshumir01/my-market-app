@@ -8,5 +8,5 @@ import ru.yandex.practicum.model.OrderItem;
 @Repository
 public interface OrderItemRepository extends ReactiveCrudRepository<OrderItem, Long> {
 
-    Flux<OrderItem> findAllByOrderIdOrderByIdAsc(Long orderId);
+    Flux<OrderItem> findAllByOrderIdOrderByIdAsc(long orderId);
 }
