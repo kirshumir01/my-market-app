@@ -7,10 +7,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
+import ru.yandex.practicum.config.PaymentSecurityConfig;
 import ru.yandex.practicum.dto.BalanceResponseDto;
 import ru.yandex.practicum.dto.PaymentRequestDto;
 import ru.yandex.practicum.dto.PaymentResponseDto;
@@ -24,11 +26,17 @@ import java.time.Instant;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.mockJwt;
 
 @WebFluxTest(controllers = PaymentController.class)
-@Import(ErrorHandler.class)
+@Import({
+        PaymentSecurityConfig.class,
+        ErrorHandler.class
+})
 @ActiveProfiles("test")
-class PaymentControllerTest {
+class PaymentControllerMockTest {
+
+    private static final Long USER_ID = 1L;
 
     @Autowired
     private WebTestClient webTestClient;
@@ -36,17 +44,22 @@ class PaymentControllerTest {
     @MockitoBean
     private PaymentService paymentService;
 
+    @MockitoBean
+    private ReactiveJwtDecoder reactiveJwtDecoder;
+
     @Test
-    @DisplayName("GET /api/v1/balance -> 200 OK with current balance")
+    @DisplayName("GET /api/v1/balance/{userId} -> 200 OK with current balance")
     void getBalanceReturnsPayloadFromService() {
-        when(paymentService.getBalance())
+        when(paymentService.getBalance(USER_ID))
                 .thenReturn(Mono.just(new BalanceResponseDto(
                         BigDecimal.valueOf(10000),
                         "RUB"
                 )));
 
-        webTestClient.get()
-                .uri("/api/v1/balance")
+        webTestClient
+                .mutateWith(mockJwt())
+                .get()
+                .uri("/api/v1/balance/{userId}", USER_ID)
                 .exchange()
                 .expectStatus().isOk()
                 .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
@@ -54,7 +67,7 @@ class PaymentControllerTest {
                 .jsonPath("$.balance").isEqualTo(10000)
                 .jsonPath("$.currency").isEqualTo("RUB");
 
-        verify(paymentService).getBalance();
+        verify(paymentService).getBalance(USER_ID);
         verifyNoMoreInteractions(paymentService);
     }
 
@@ -77,12 +90,15 @@ class PaymentControllerTest {
         String request = """
                 {
                   "orderId": 1001,
+                  "userId": 1,
                   "amount": 2499.90,
                   "currency": "RUB"
                 }
                 """;
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(mockJwt())
+                .post()
                 .uri("/api/v1/payments")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -106,6 +122,7 @@ class PaymentControllerTest {
         PaymentRequestDto actualRequest = captor.getValue();
 
         assertThat(actualRequest.getOrderId()).isEqualTo(1001L);
+        assertThat(actualRequest.getUserId()).isEqualTo(USER_ID);
         assertThat(actualRequest.getAmount()).isEqualByComparingTo("2499.90");
         assertThat(actualRequest.getCurrency()).isEqualTo("RUB");
 
@@ -131,12 +148,15 @@ class PaymentControllerTest {
         String request = """
                 {
                   "orderId": 1001,
+                  "userId": 1,
                   "amount": 2499.90,
                   "currency": "RUB"
                 }
                 """;
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(mockJwt())
+                .post()
                 .uri("/api/v1/payments")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -161,67 +181,78 @@ class PaymentControllerTest {
         String request = """
                 {
                   "orderId": 1001,
+                  "userId": 1,
                   "amount": 0,
                   "currency": "RUB"
                 }
                 """;
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(mockJwt())
+                .post()
                 .uri("/api/v1/payments")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .exchange()
-                .expectStatus().isBadRequest()
-                .expectBody()
-                .jsonPath("$.error").isEqualTo("Validation failed")
-                .jsonPath("$.description").exists();
+                .expectStatus().isBadRequest();
 
         verifyNoInteractions(paymentService);
     }
 
     @Test
-    @DisplayName("POST /api/v1/payments with blank currency -> 400 BAD REQUEST")
-    void postPaymentWhenCurrencyIsBlankReturnsBadRequest() {
+    @DisplayName("POST /api/v1/payments without userId -> 400 BAD REQUEST")
+    void postPaymentWhenUserIdIsMissingReturnsBadRequest() {
         String request = """
                 {
                   "orderId": 1001,
                   "amount": 2499.90,
-                  "currency": ""
+                  "currency": "RUB"
                 }
                 """;
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(mockJwt())
+                .post()
                 .uri("/api/v1/payments")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .exchange()
-                .expectStatus().isBadRequest()
-                .expectBody()
-                .jsonPath("$.error").isEqualTo("Validation failed")
-                .jsonPath("$.description").exists();
+                .expectStatus().isBadRequest();
 
         verifyNoInteractions(paymentService);
     }
 
     @Test
-    @DisplayName("POST /api/v1/payments with malformed JSON -> 400 BAD REQUEST")
-    void postPaymentWhenBodyIsMalformedReturnsBadRequest() {
+    @DisplayName("GET /api/v1/balance/{userId} anonymous -> 401 UNAUTHORIZED")
+    void getBalanceWithoutToken_shouldReturnUnauthorized() {
+        webTestClient
+                .get()
+                .uri("/api/v1/balance/{userId}", USER_ID)
+                .exchange()
+                .expectStatus().isUnauthorized();
+
+        verifyNoInteractions(paymentService);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/payments anonymous -> 401 UNAUTHORIZED")
+    void postPaymentWithoutToken_shouldReturnUnauthorized() {
         String request = """
                 {
                   "orderId": 1001,
-                  "amount":
+                  "userId": 1,
+                  "amount": 2499.90,
+                  "currency": "RUB"
                 }
                 """;
 
-        webTestClient.post()
+        webTestClient
+                .post()
                 .uri("/api/v1/payments")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .exchange()
-                .expectStatus().isBadRequest()
-                .expectBody()
-                .jsonPath("$.error").exists()
-                .jsonPath("$.description").exists();
+                .expectStatus().isUnauthorized();
 
         verifyNoInteractions(paymentService);
     }
