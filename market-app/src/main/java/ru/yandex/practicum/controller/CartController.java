@@ -1,9 +1,6 @@
 package ru.yandex.practicum.controller;
 
 import lombok.AllArgsConstructor;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -17,6 +14,8 @@ import ru.yandex.practicum.dto.request.CartRequest;
 import ru.yandex.practicum.mapper.CartRequestMapper;
 import ru.yandex.practicum.service.CartService;
 
+import java.security.Principal;
+
 @Controller
 @AllArgsConstructor
 public class CartController {
@@ -27,15 +26,9 @@ public class CartController {
     @GetMapping("/cart/items")
     public Mono<Rendering> getCart(
             @RequestParam(defaultValue = "false") boolean paymentError,
-            @AuthenticationPrincipal UserDetails userDetails
+            Principal principal
     ) {
-        if (userDetails == null) {
-            return Mono.error(new AccessDeniedException("User is not authenticated"));
-        }
-
-        String username = userDetails.getUsername();
-
-        return cartService.getCartView(username, paymentError)
+        return cartService.getCartView(principal.getName(), paymentError)
                 .map(view -> Rendering.view("cart")
                         .modelAttribute("items", view.getItems())
                         .modelAttribute("total", view.getTotal())
@@ -51,12 +44,8 @@ public class CartController {
     @PostMapping("/cart/items")
     public Mono<String> changeItemCountFromCart(
             ServerWebExchange exchange,
-            @AuthenticationPrincipal UserDetails userDetails
+            Principal principal
     ) {
-        if (userDetails == null) {
-            return Mono.error(new AccessDeniedException("User is not authenticated"));
-        }
-
         MultiValueMap<String, String> queryParams = exchange.getRequest().getQueryParams();
 
         return exchange.getFormData()
@@ -65,7 +54,7 @@ public class CartController {
                     CartRequest request = cartRequestMapper.from(queryParams, formData);
 
                     return cartService.changeItemsCount(
-                                    userDetails.getUsername(),
+                                    principal.getName(),
                                     request.getItemId(),
                                     request.getAction()
                             )
