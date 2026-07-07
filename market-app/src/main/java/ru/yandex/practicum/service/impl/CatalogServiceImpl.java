@@ -13,15 +13,14 @@ import ru.yandex.practicum.dto.catalog.CatalogPageRequest;
 import ru.yandex.practicum.dto.item.ItemDto;
 import ru.yandex.practicum.dto.item.ItemsPageDto;
 import ru.yandex.practicum.dto.item.PageDto;
-import ru.yandex.practicum.exception.NotFoundException;
 import ru.yandex.practicum.mapper.ItemMapper;
 import ru.yandex.practicum.model.CartItem;
 import ru.yandex.practicum.model.Item;
 import ru.yandex.practicum.model.ItemSort;
 import ru.yandex.practicum.repository.CartItemRepository;
 import ru.yandex.practicum.repository.ItemRepository;
-import ru.yandex.practicum.repository.UserRepository;
 import ru.yandex.practicum.service.CatalogService;
+import ru.yandex.practicum.service.UserService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +33,7 @@ public class CatalogServiceImpl implements CatalogService {
 
     private final ItemRepository itemRepository;
     private final CartItemRepository cartItemRepository;
-    private final UserRepository userRepository;
+    private final UserService userService;
 
     @Value("${catalog.default-page-size}")
     private int defaultPageSize;
@@ -148,13 +147,11 @@ public class CatalogServiceImpl implements CatalogService {
                 .map(Item::getId)
                 .toList();
 
-        return userRepository.findByUsername(username)
-                .switchIfEmpty(Mono.error(
-                        new NotFoundException("User with username = %s not found".formatted(username))
-                ))
-                .flatMapMany(user -> cartItemRepository.findAllByUserIdAndItemIdIn(user.getId(), itemIds))
+        return userService.getOptionalUserId(username)
+                .flatMapMany(userId -> cartItemRepository.findAllByUserIdAndItemIdIn(userId, itemIds))
                 .collectList()
-                .map(this::toItemsCountMap);
+                .map(this::toItemsCountMap)
+                .defaultIfEmpty(Map.of());
     }
 
     private Map<Long, Integer> toItemsCountMap(List<CartItem> cartItems) {

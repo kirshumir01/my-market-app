@@ -15,8 +15,12 @@ import ru.yandex.practicum.exception.BadRequestException;
 import ru.yandex.practicum.exception.NotFoundException;
 import ru.yandex.practicum.mapper.OrderMapper;
 import ru.yandex.practicum.model.*;
-import ru.yandex.practicum.repository.*;
+import ru.yandex.practicum.repository.CartItemRepository;
+import ru.yandex.practicum.repository.ItemRepository;
+import ru.yandex.practicum.repository.OrderItemRepository;
+import ru.yandex.practicum.repository.OrderRepository;
 import ru.yandex.practicum.service.OrderService;
+import ru.yandex.practicum.service.UserService;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,7 +38,7 @@ public class OrderServiceImpl implements OrderService {
     private final ItemRepository itemRepository;
     private final PaymentClient paymentClient;
     private final ItemCacheService cacheService;
-    private final UserRepository userRepository;
+    private final UserService userService;
 
     @Override
     @Transactional(readOnly = true)
@@ -65,7 +69,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private Mono<Long> getUserId(String username) {
-        return userRepository.findByUsername(username)
+        return userService.getRequiredUser(username)
                 .switchIfEmpty(Mono.error(
                         new NotFoundException("User with username = %s not found".formatted(username))
                 ))

@@ -2,7 +2,6 @@ package ru.yandex.practicum.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -13,16 +12,14 @@ import ru.yandex.practicum.dto.cart.CartDto;
 import ru.yandex.practicum.dto.cart.CartViewDto;
 import ru.yandex.practicum.dto.item.ItemDto;
 import ru.yandex.practicum.exception.NotFoundException;
-import ru.yandex.practicum.exception.UnauthorizedException;
 import ru.yandex.practicum.mapper.CartMapper;
 import ru.yandex.practicum.mapper.ItemMapper;
 import ru.yandex.practicum.model.CartAction;
 import ru.yandex.practicum.model.CartItem;
-import ru.yandex.practicum.model.User;
 import ru.yandex.practicum.repository.CartItemRepository;
 import ru.yandex.practicum.repository.ItemRepository;
-import ru.yandex.practicum.repository.UserRepository;
 import ru.yandex.practicum.service.CartService;
+import ru.yandex.practicum.service.UserService;
 
 import java.util.List;
 
@@ -37,14 +34,13 @@ public class CartServiceImpl implements CartService {
     private final ItemRepository itemRepository;
     private final ItemCacheService cacheService;
     private final PaymentClient paymentClient;
-    private final UserRepository userRepository;
+    private final UserService userService;
 
     @Override
     @Transactional(readOnly = true)
     public Mono<CartViewDto> getCartView(String username, boolean paymentError) {
-        return userRepository.findByUsername(username)
-                .switchIfEmpty(Mono.error(new UnauthorizedException("User is not authenticated")))
-                .flatMap(user -> getCart(username)
+        return userService.getRequiredUser(username)
+                .flatMap(user -> getCartByUserId(user.getId())
                         .flatMap(cart -> paymentClient.getBalance(user.getId())
                                 .map(balance -> CartMapper.toCartViewDto(
                                         cart,
@@ -54,15 +50,7 @@ public class CartServiceImpl implements CartService {
                                         false
                                 ))
                                 .onErrorResume(ex -> {
-                                    if (ex instanceof WebClientResponseException e) {
-                                        log.warn(
-                                                "Payment service returned {} {}",
-                                                e.getStatusCode(),
-                                                e.getResponseBodyAsString()
-                                        );
-                                    } else {
-                                        log.warn("Payment service is unavailable", ex);
-                                    }
+                                    logPaymentServiceError(ex);
 
                                     return Mono.just(CartMapper.toCartViewDto(
                                             cart,
@@ -74,12 +62,23 @@ public class CartServiceImpl implements CartService {
                                 })));
     }
 
-    public Mono<CartDto> getCart(String username) {
-        return getUser(username)
-                .flatMapMany(user -> cartItemRepository.findAllByUserId(user.getId()))
+    private Mono<CartDto> getCartByUserId(Long userId) {
+        return cartItemRepository.findAllByUserId(userId)
                 .flatMap(this::toItemDto)
                 .collectList()
                 .map(this::toCartDto);
+    }
+
+    private void logPaymentServiceError(Throwable ex) {
+        if (ex instanceof WebClientResponseException e) {
+            log.warn(
+                    "Payment service returned {} {}",
+                    e.getStatusCode(),
+                    e.getResponseBodyAsString()
+            );
+        } else {
+            log.warn("Payment service is unavailable", ex);
+        }
     }
 
     private Mono<ItemDto> toItemDto(CartItem cartItem) {
@@ -102,7 +101,7 @@ public class CartServiceImpl implements CartService {
     @Override
     @Transactional
     public Mono<Void> changeItemsCount(String username, long itemId, CartAction action) {
-        return getUser(username)
+        return userService.getRequiredUser(username)
                 .flatMap(user -> switch (action) {
                     case PLUS -> addItem(user.getId(), itemId);
                     case MINUS -> decreaseItem(user.getId(), itemId);
@@ -149,16 +148,5 @@ public class CartServiceImpl implements CartService {
                         new NotFoundException("Cart item with item id = %d not found".formatted(itemId))
                 ))
                 .flatMap(cartItemRepository::delete);
-    }
-
-    private Mono<User> getUser(String username) {
-        if (username == null || username.isBlank()) {
-            return Mono.error(new AccessDeniedException("User is not authenticated"));
-        }
-
-        return userRepository.findByUsername(username)
-                .switchIfEmpty(Mono.error(
-                        new NotFoundException("User with username = %s not found".formatted(username))
-                ));
     }
 }
