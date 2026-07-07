@@ -44,12 +44,10 @@ class CatalogServiceTest {
     private CartItemRepository cartItemRepository;
 
     @Mock
-    private UserRepository userRepository;
+    private UserService userService;
 
     @InjectMocks
     private CatalogServiceImpl catalogService;
-
-    private User user;
 
     private Item item_1;
     private Item item_2;
@@ -61,8 +59,6 @@ class CatalogServiceTest {
 
     @BeforeEach
     void setUp() {
-        user = TestDataFactory.user();
-
         item_1 = TestDataFactory.item1();
         item_2 = TestDataFactory.item2();
         item_3 = TestDataFactory.item3();
@@ -100,7 +96,7 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verifyNoInteractions(userRepository, cartItemRepository);
+        verifyNoInteractions(cartItemRepository);
         verifyNoMoreInteractions(itemRepository);
     }
 
@@ -108,9 +104,11 @@ class CatalogServiceTest {
     @DisplayName("getItems(username) -> returns paged items when search query is blank")
     void getItems_whenSearchIsBlank_shouldReturnPagedItems() {
         when(itemRepository.count()).thenReturn(Mono.just(3L));
-        when(itemRepository.findAllBy(any(Pageable.class)))
-                .thenReturn(Flux.just(item_1, item_2, item_3));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+
+        when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_1, item_2, item_3));
+
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
+
         when(cartItemRepository.findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L, 3L)))
                 .thenReturn(Flux.just(cartItem_1, cartItem_2));
 
@@ -128,9 +126,9 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L, 3L));
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
 
     @Test
@@ -145,7 +143,8 @@ class CatalogServiceTest {
                 any(Pageable.class)
         )).thenReturn(Flux.just(item_1, item_2));
 
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
+
         when(cartItemRepository.findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L)))
                 .thenReturn(Flux.just(cartItem_1, cartItem_2));
 
@@ -171,9 +170,9 @@ class CatalogServiceTest {
         );
         verify(itemRepository, never()).count();
         verify(itemRepository, never()).findAllBy(any(Pageable.class));
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L));
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
 
     @Test
@@ -194,7 +193,7 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verifyNoInteractions(userRepository, cartItemRepository);
+        verifyNoInteractions(userService, cartItemRepository);
         verifyNoMoreInteractions(itemRepository);
     }
 
@@ -202,9 +201,8 @@ class CatalogServiceTest {
     @DisplayName("getItems(username) -> maps cart item counts correctly")
     void getItems_shouldMapCartItemsCountsCorrectly() {
         when(itemRepository.count()).thenReturn(Mono.just(2L));
-        when(itemRepository.findAllBy(any(Pageable.class)))
-                .thenReturn(Flux.just(item_1, item_2));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_1, item_2));
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
         when(cartItemRepository.findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L)))
                 .thenReturn(Flux.just(cartItem_1, cartItem_2));
 
@@ -224,18 +222,17 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L));
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
 
     @Test
     @DisplayName("getItems(username) -> sets zero count for items not present in cart")
     void getItems_whenItemNotExistsInCart_shouldSetCountZero() {
         when(itemRepository.count()).thenReturn(Mono.just(2L));
-        when(itemRepository.findAllBy(any(Pageable.class)))
-                .thenReturn(Flux.just(item_1, item_2));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_1, item_2));
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
         when(cartItemRepository.findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L)))
                 .thenReturn(Flux.empty());
 
@@ -255,9 +252,9 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L));
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
 
     @Test
@@ -265,7 +262,7 @@ class CatalogServiceTest {
     void getItems_shouldCalculatePagingCorrectly() {
         when(itemRepository.count()).thenReturn(Mono.just(1L));
         when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_4));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
         when(cartItemRepository.findAllByUserIdAndItemIdIn(USER_ID, List.of(4L)))
                 .thenReturn(Flux.empty());
 
@@ -282,9 +279,9 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(4L));
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
 
     @Test
@@ -292,7 +289,7 @@ class CatalogServiceTest {
     void getItems_whenSortIsAlpha_shouldSortByTitleAscending() {
         when(itemRepository.count()).thenReturn(Mono.just(1L));
         when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_1));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
         when(cartItemRepository.findAllByUserIdAndItemIdIn(USER_ID, List.of(1L)))
                 .thenReturn(Flux.empty());
 
@@ -306,7 +303,7 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(pageableCaptor.capture());
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(1L));
 
         Pageable pageable = pageableCaptor.getValue();
@@ -316,16 +313,15 @@ class CatalogServiceTest {
         assertThat(pageable.getSort().getOrderFor("title")).isNotNull();
         assertThat(pageable.getSort().getOrderFor("title").isAscending()).isTrue();
 
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
 
     @Test
     @DisplayName("getItems(username) -> applies price ascending sort")
     void getItems_whenSortIsPrice_shouldSortByPriceAscending() {
         when(itemRepository.count()).thenReturn(Mono.just(2L));
-        when(itemRepository.findAllBy(any(Pageable.class)))
-                .thenReturn(Flux.just(item_1, item_2));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_1, item_2));
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
         when(cartItemRepository.findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L)))
                 .thenReturn(Flux.empty());
 
@@ -339,7 +335,7 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(pageableCaptor.capture());
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L));
 
         Pageable pageable = pageableCaptor.getValue();
@@ -349,7 +345,7 @@ class CatalogServiceTest {
         assertThat(pageable.getSort().getOrderFor("price")).isNotNull();
         assertThat(pageable.getSort().getOrderFor("price").isAscending()).isTrue();
 
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
 
     @Test
@@ -357,7 +353,7 @@ class CatalogServiceTest {
     void getItems_whenSortIsNo_shouldUseUnsortedPageable() {
         when(itemRepository.count()).thenReturn(Mono.just(1L));
         when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_1));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
         when(cartItemRepository.findAllByUserIdAndItemIdIn(USER_ID, List.of(1L)))
                 .thenReturn(Flux.empty());
 
@@ -378,7 +374,7 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(pageableCaptor.capture());
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(1L));
 
         Pageable pageable = pageableCaptor.getValue();
@@ -387,17 +383,15 @@ class CatalogServiceTest {
         assertThat(pageable.getPageSize()).isEqualTo(3);
         assertThat(pageable.getSort().isUnsorted()).isTrue();
 
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
-
 
     @Test
     @DisplayName("getItems(username) -> groups items by rows")
     void getItems_shouldGroupItemsByRows() {
         when(itemRepository.count()).thenReturn(Mono.just(4L));
-        when(itemRepository.findAllBy(any(Pageable.class)))
-                .thenReturn(Flux.just(item_1, item_2, item_3, item_4));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_1, item_2, item_3, item_4));
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
         when(cartItemRepository.findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L, 3L, 4L)))
                 .thenReturn(Flux.empty());
 
@@ -417,9 +411,9 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L, 3L, 4L));
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
 
     @Test
@@ -427,7 +421,7 @@ class CatalogServiceTest {
     void getItems_whenItemsCountLessThanThree_shouldReturnPaddedGroup() {
         when(itemRepository.count()).thenReturn(Mono.just(1L));
         when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_1));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
         when(cartItemRepository.findAllByUserIdAndItemIdIn(USER_ID, List.of(1L)))
                 .thenReturn(Flux.empty());
 
@@ -444,20 +438,21 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(1L));
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
 
     @Test
     @DisplayName("getItems(username) -> requests cart items using current user id and page item ids")
     void getItems_shouldCallCartRepositoryWithCorrectUserIdAndItemIds() {
         when(itemRepository.count()).thenReturn(Mono.just(3L));
-        when(itemRepository.findAllBy(any(Pageable.class)))
-                .thenReturn(Flux.just(item_1, item_2, item_3));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
-        when(cartItemRepository.findAllByUserIdAndItemIdIn(eq(USER_ID), anyList()))
-                .thenReturn(Flux.empty());
+
+        when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_1, item_2, item_3));
+
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
+
+        when(cartItemRepository.findAllByUserIdAndItemIdIn(eq(USER_ID), anyList())).thenReturn(Flux.empty());
 
         StepVerifier.create(catalogService.getItems(USERNAME, "", ItemSort.NO, 1, 3))
                 .expectNextCount(1)
@@ -465,9 +460,12 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verify(userRepository).findByUsername(USERNAME);
-        verify(cartItemRepository).findAllByUserIdAndItemIdIn(USER_ID, List.of(1L, 2L, 3L));
-        verifyNoMoreInteractions(itemRepository, userRepository, cartItemRepository);
+        verify(userService).getOptionalUserId(USERNAME);
+        verify(cartItemRepository).findAllByUserIdAndItemIdIn(
+                USER_ID,
+                List.of(1L, 2L, 3L)
+        );
+        verifyNoMoreInteractions(itemRepository, userService, cartItemRepository);
     }
 
     @Test
@@ -486,7 +484,7 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verifyNoInteractions(userRepository, cartItemRepository);
+        verifyNoInteractions(userService, cartItemRepository);
         verifyNoMoreInteractions(itemRepository);
     }
 
@@ -511,7 +509,7 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verifyNoInteractions(userRepository, cartItemRepository);
+        verifyNoInteractions(userService, cartItemRepository);
         verifyNoMoreInteractions(itemRepository);
     }
 
@@ -519,8 +517,12 @@ class CatalogServiceTest {
     @DisplayName("getItems(username) -> throws NotFoundException when user does not exist")
     void getItems_whenUserDoesNotExist_shouldThrowNotFoundException() {
         when(itemRepository.count()).thenReturn(Mono.just(1L));
+
         when(itemRepository.findAllBy(any(Pageable.class))).thenReturn(Flux.just(item_1));
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.empty());
+
+        when(userService.getOptionalUserId(USERNAME)).thenReturn(Mono.error(
+                        new NotFoundException("User with username = user not found")
+                ));
 
         StepVerifier.create(catalogService.getItems(USERNAME, "", ItemSort.NO, 1, 3))
                 .expectErrorSatisfies(error -> {
@@ -532,8 +534,8 @@ class CatalogServiceTest {
 
         verify(itemRepository).count();
         verify(itemRepository).findAllBy(any(Pageable.class));
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getOptionalUserId(USERNAME);
         verifyNoInteractions(cartItemRepository);
-        verifyNoMoreInteractions(itemRepository, userRepository);
+        verifyNoMoreInteractions(itemRepository, userService);
     }
 }

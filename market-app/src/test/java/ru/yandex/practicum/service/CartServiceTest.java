@@ -16,6 +16,7 @@ import ru.yandex.practicum.cache.ItemCacheService;
 import ru.yandex.practicum.client.PaymentClient;
 import ru.yandex.practicum.dto.cache.ItemCardCacheDto;
 import ru.yandex.practicum.dto.item.ItemDto;
+import ru.yandex.practicum.dto.payment.BalanceResponseDto;
 import ru.yandex.practicum.exception.NotFoundException;
 import ru.yandex.practicum.model.CartAction;
 import ru.yandex.practicum.model.CartItem;
@@ -52,7 +53,7 @@ class CartServiceTest {
     private PaymentClient paymentClient;
 
     @Mock
-    private UserRepository userRepository;
+    private UserService userService;
 
     @InjectMocks
     private CartServiceImpl cartService;
@@ -67,6 +68,8 @@ class CartServiceTest {
     private ItemCardCacheDto itemCard_1;
     private ItemCardCacheDto itemCard_2;
 
+    private BalanceResponseDto balanceDto;
+
     @BeforeEach
     void setUp() {
         user = TestDataFactory.user();
@@ -78,12 +81,14 @@ class CartServiceTest {
 
         itemCard_1 = TestDataFactory.itemCard1();
         itemCard_2 = TestDataFactory.itemCard2();
+
+        balanceDto = TestDataFactory.balanceDto();
     }
 
     @Test
-    @DisplayName("getCart(username) -> returns cart with items and total amount")
-    void getCart_shouldReturnCartWithItemsAndTotal() {
-        when(userRepository.findByUsername(USERNAME))
+    @DisplayName("getCartView(username, paymentError) -> returns cart view with items, total and balance")
+    void getCartView_shouldReturnCartViewWithItemsTotalAndBalance() {
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findAllByUserId(USER_ID))
@@ -95,13 +100,20 @@ class CartServiceTest {
         when(cacheService.getItemCardCached(2L))
                 .thenReturn(Mono.just(itemCard_2));
 
+        when(paymentClient.getBalance(USER_ID))
+                .thenReturn(Mono.just(balanceDto));
+
         long expectedTotal = 999L * 2 + 2999L * 3;
 
-        StepVerifier.create(cartService.getCart(USERNAME))
+        StepVerifier.create(cartService.getCartView(USERNAME, false))
                 .assertNext(result -> {
                     assertThat(result).isNotNull();
                     assertThat(result.getItems()).hasSize(2);
                     assertThat(result.getTotal()).isEqualTo(expectedTotal);
+                    assertThat(result.getBalance()).isEqualTo(balanceDto.getBalance());
+                    assertThat(result.getCurrency()).isEqualTo(balanceDto.getCurrency());
+                    assertThat(result.isPaymentError()).isFalse();
+                    assertThat(result.isPaymentServiceError()).isFalse();
 
                     assertThat(result.getItems())
                             .extracting(ItemDto::getId)
@@ -113,55 +125,70 @@ class CartServiceTest {
                 })
                 .verifyComplete();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findAllByUserId(USER_ID);
         verify(cacheService).getItemCardCached(1L);
         verify(cacheService).getItemCardCached(2L);
-        verifyNoInteractions(itemRepository, paymentClient);
+        verify(paymentClient).getBalance(USER_ID);
+        verifyNoInteractions(itemRepository);
     }
 
     @Test
-    @DisplayName("getCart(username) -> returns empty cart when user cart has no items")
-    void getCart_whenCartIsEmpty_shouldReturnEmptyCart() {
-        when(userRepository.findByUsername(USERNAME))
+    @DisplayName("getCartView(username, paymentError) -> returns empty cart when user cart has no items")
+    void getCartView_whenCartIsEmpty_shouldReturnEmptyCart() {
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findAllByUserId(USER_ID))
                 .thenReturn(Flux.empty());
 
-        StepVerifier.create(cartService.getCart(USERNAME))
+        when(paymentClient.getBalance(USER_ID))
+                .thenReturn(Mono.just(balanceDto));
+
+        StepVerifier.create(cartService.getCartView(USERNAME, false))
                 .assertNext(result -> {
                     assertThat(result).isNotNull();
                     assertThat(result.getItems()).isEmpty();
                     assertThat(result.getTotal()).isZero();
+                    assertThat(result.getBalance()).isEqualTo(balanceDto.getBalance());
+                    assertThat(result.getCurrency()).isEqualTo(balanceDto.getCurrency());
+                    assertThat(result.isPaymentError()).isFalse();
+                    assertThat(result.isPaymentServiceError()).isFalse();
                 })
                 .verifyComplete();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findAllByUserId(USER_ID);
-        verifyNoInteractions(cacheService, itemRepository, paymentClient);
+        verify(paymentClient).getBalance(USER_ID);
+        verifyNoInteractions(cacheService, itemRepository);
     }
 
     @Test
-    @DisplayName("getCart(username) -> throws AccessDeniedException when username is null")
-    void getCart_whenUsernameIsNull_shouldThrowAccessDeniedException() {
-        StepVerifier.create(cartService.getCart(null))
+    @DisplayName("getCartView(username, paymentError) -> throws AccessDeniedException when username is null")
+    void getCartView_whenUsernameIsNull_shouldThrowAccessDeniedException() {
+        when(userService.getRequiredUser(null))
+                .thenReturn(Mono.error(new AccessDeniedException("User is not authenticated")));
+
+        StepVerifier.create(cartService.getCartView(null, false))
                 .expectErrorSatisfies(error -> {
                     assertThat(error).isInstanceOf(AccessDeniedException.class);
                     assertThat(error.getMessage()).isEqualTo("User is not authenticated");
                 })
                 .verify();
 
-        verifyNoInteractions(userRepository, cartItemRepository, cacheService, itemRepository, paymentClient);
+        verify(userService).getRequiredUser(null);
+        verifyNoInteractions(cartItemRepository, cacheService, itemRepository, paymentClient);
     }
 
     @Test
-    @DisplayName("getCart(username) -> throws NotFoundException when user does not exist")
-    void getCart_whenUserDoesNotExist_shouldThrowNotFoundException() {
-        when(userRepository.findByUsername(USERNAME))
-                .thenReturn(Mono.empty());
+    @DisplayName("getCartView(username, paymentError) -> throws NotFoundException when user does not exist")
+    void getCartView_whenUserDoesNotExist_shouldThrowNotFoundException() {
+        when(userService.getRequiredUser(USERNAME))
+                .thenReturn(Mono.error(
+                        new NotFoundException("User with username = user not found")
+                ));
 
-        StepVerifier.create(cartService.getCart(USERNAME))
+        StepVerifier.create(cartService.getCartView(USERNAME, false))
                 .expectErrorSatisfies(error -> {
                     assertThat(error).isInstanceOf(NotFoundException.class);
                     assertThat(error.getMessage())
@@ -169,14 +196,14 @@ class CartServiceTest {
                 })
                 .verify();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verifyNoInteractions(cartItemRepository, cacheService, itemRepository, paymentClient);
     }
 
     @Test
     @DisplayName("changeItemsCount(username, itemId, PLUS) -> increments item count when cart item exists")
     void changeItemsCount_whenActionPlusAndCartItemExists_shouldIncreaseCount() {
-        when(userRepository.findByUsername(USERNAME))
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
@@ -193,18 +220,18 @@ class CartServiceTest {
 
         assertThat(cartItem_1.getCount()).isEqualTo(3);
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, 1L);
         verify(cartItemRepository).save(cartItem_1);
         verify(itemRepository).findById(1L);
         verifyNoInteractions(cacheService, paymentClient);
-        verifyNoMoreInteractions(userRepository, cartItemRepository, itemRepository);
+        verifyNoMoreInteractions(userService, cartItemRepository, itemRepository);
     }
 
     @Test
     @DisplayName("changeItemsCount(username, itemId, PLUS) -> creates cart item when item is not in cart")
     void changeItemsCount_whenActionPlusAndCartItemDoesNotExist_shouldCreateCartItem() {
-        when(userRepository.findByUsername(USERNAME))
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
@@ -231,7 +258,7 @@ class CartServiceTest {
         assertThat(savedCartItem.getItemId()).isEqualTo(1L);
         assertThat(savedCartItem.getCount()).isEqualTo(1);
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, 1L);
         verify(itemRepository).findById(1L);
         verifyNoInteractions(cacheService, paymentClient);
@@ -240,7 +267,7 @@ class CartServiceTest {
     @Test
     @DisplayName("changeItemsCount(username, itemId, MINUS) -> decrements item count when quantity is greater than one")
     void changeItemsCount_whenActionMinusAndCountGreaterThanOne_shouldDecreaseCount() {
-        when(userRepository.findByUsername(USERNAME))
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
@@ -254,7 +281,7 @@ class CartServiceTest {
 
         assertThat(cartItem_1.getCount()).isEqualTo(1);
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, 1L);
         verify(cartItemRepository).save(cartItem_1);
         verify(cartItemRepository, never()).delete(any(CartItem.class));
@@ -266,7 +293,7 @@ class CartServiceTest {
     void changeItemsCount_whenActionMinusAndCountEqualsOne_shouldDeleteCartItem() {
         cartItem_1.setCount(1);
 
-        when(userRepository.findByUsername(USERNAME))
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
@@ -278,7 +305,7 @@ class CartServiceTest {
         StepVerifier.create(cartService.changeItemsCount(USERNAME, 1L, CartAction.MINUS))
                 .verifyComplete();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, 1L);
         verify(cartItemRepository).delete(cartItem_1);
         verify(cartItemRepository, never()).save(any(CartItem.class));
@@ -288,7 +315,7 @@ class CartServiceTest {
     @Test
     @DisplayName("changeItemsCount(username, itemId, MINUS) -> throws NotFoundException when cart item does not exist")
     void changeItemsCount_whenActionMinusAndCartItemDoesNotExist_shouldThrowException() {
-        when(userRepository.findByUsername(USERNAME))
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
@@ -302,7 +329,7 @@ class CartServiceTest {
                 })
                 .verify();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, 1L);
         verify(cartItemRepository, never()).save(any(CartItem.class));
         verify(cartItemRepository, never()).delete(any(CartItem.class));
@@ -312,7 +339,7 @@ class CartServiceTest {
     @Test
     @DisplayName("changeItemsCount(username, itemId, DELETE) -> deletes cart item")
     void changeItemsCount_whenActionDeleteAndCartItemExists_shouldDeleteCartItem() {
-        when(userRepository.findByUsername(USERNAME))
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
@@ -324,7 +351,7 @@ class CartServiceTest {
         StepVerifier.create(cartService.changeItemsCount(USERNAME, 1L, CartAction.DELETE))
                 .verifyComplete();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, 1L);
         verify(cartItemRepository).delete(cartItem_1);
         verify(cartItemRepository, never()).save(any(CartItem.class));
@@ -334,7 +361,7 @@ class CartServiceTest {
     @Test
     @DisplayName("changeItemsCount(username, itemId, DELETE) -> throws NotFoundException when cart item does not exist")
     void changeItemsCount_whenActionDeleteAndCartItemDoesNotExist_shouldThrowException() {
-        when(userRepository.findByUsername(USERNAME))
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
@@ -348,7 +375,7 @@ class CartServiceTest {
                 })
                 .verify();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, 1L);
         verify(cartItemRepository, never()).delete(any(CartItem.class));
         verify(cartItemRepository, never()).save(any(CartItem.class));
@@ -358,7 +385,7 @@ class CartServiceTest {
     @Test
     @DisplayName("changeItemsCount(username, itemId, PLUS) -> throws NotFoundException when item does not exist")
     void changeItemsCount_whenItemDoesNotExist_shouldThrowNotFoundException() {
-        when(userRepository.findByUsername(USERNAME))
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findByUserIdAndItemId(USER_ID, 999L))
@@ -375,7 +402,7 @@ class CartServiceTest {
                 })
                 .verify();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, 999L);
         verify(itemRepository).findById(999L);
         verify(cartItemRepository, never()).save(any(CartItem.class));
@@ -390,7 +417,7 @@ class CartServiceTest {
 
         CartItem otherUserCartItem = new CartItem(10L, OTHER_USER_ID, itemId, 1);
 
-        when(userRepository.findByUsername(USERNAME))
+        when(userService.getRequiredUser(USERNAME))
                 .thenReturn(Mono.just(user));
 
         when(cartItemRepository.findByUserIdAndItemId(USER_ID, itemId))
@@ -404,7 +431,7 @@ class CartServiceTest {
                 })
                 .verify();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, itemId);
 
         verify(cartItemRepository, never())

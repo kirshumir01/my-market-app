@@ -36,7 +36,7 @@ class ItemServiceTest {
     private ItemCacheService cacheService;
 
     @Mock
-    private UserRepository userRepository;
+    private UserService userService;
 
     @InjectMocks
     private ItemServiceImpl itemService;
@@ -60,14 +60,9 @@ class ItemServiceTest {
     @Test
     @DisplayName("getItem(username, id) -> returns item with cart count when item exists in user's cart")
     void getItem_whenItemExistsInCacheAndExistsInUserCart_shouldReturnItemWithCount() {
-        when(cacheService.getItemCardCached(1L))
-                .thenReturn(Mono.just(itemCard));
-
-        when(userRepository.findByUsername(USERNAME))
-                .thenReturn(Mono.just(user));
-
-        when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
-                .thenReturn(Mono.just(cartItem));
+        when(cacheService.getItemCardCached(1L)).thenReturn(Mono.just(itemCard));
+        when(userService.getRequiredUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
+        when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L)).thenReturn(Mono.just(cartItem));
 
         StepVerifier.create(itemService.getItem(USERNAME, 1L))
                 .assertNext(result -> {
@@ -80,21 +75,16 @@ class ItemServiceTest {
                 .verifyComplete();
 
         verify(cacheService).getItemCardCached(1L);
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUserId(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, 1L);
     }
 
     @Test
     @DisplayName("getItem(username, id) -> returns item with zero count when item is not in user's cart")
     void getItem_whenItemExistsButNotInUserCart_shouldReturnItemWithZeroCount() {
-        when(cacheService.getItemCardCached(1L))
-                .thenReturn(Mono.just(itemCard));
-
-        when(userRepository.findByUsername(USERNAME))
-                .thenReturn(Mono.just(user));
-
-        when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
-                .thenReturn(Mono.empty());
+        when(cacheService.getItemCardCached(1L)).thenReturn(Mono.just(itemCard));
+        when(userService.getRequiredUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
+        when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L)).thenReturn(Mono.empty());
 
         StepVerifier.create(itemService.getItem(USERNAME, 1L))
                 .assertNext(result -> {
@@ -107,15 +97,14 @@ class ItemServiceTest {
                 .verifyComplete();
 
         verify(cacheService).getItemCardCached(1L);
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUserId(USERNAME);
         verify(cartItemRepository).findByUserIdAndItemId(USER_ID, 1L);
     }
 
     @Test
     @DisplayName("getItem(null, id) -> returns item with zero count for anonymous user")
     void getItem_whenUsernameIsNull_shouldReturnItemWithZeroCount() {
-        when(cacheService.getItemCardCached(1L))
-                .thenReturn(Mono.just(itemCard));
+        when(cacheService.getItemCardCached(1L)).thenReturn(Mono.just(itemCard));
 
         StepVerifier.create(itemService.getItem(null, 1L))
                 .assertNext(result -> {
@@ -125,14 +114,13 @@ class ItemServiceTest {
                 .verifyComplete();
 
         verify(cacheService).getItemCardCached(1L);
-        verifyNoInteractions(userRepository, cartItemRepository);
+        verifyNoInteractions(cartItemRepository);
     }
 
     @Test
     @DisplayName("getItem(blank username, id) -> returns item with zero count")
     void getItem_whenUsernameIsBlank_shouldReturnItemWithZeroCount() {
-        when(cacheService.getItemCardCached(1L))
-                .thenReturn(Mono.just(itemCard));
+        when(cacheService.getItemCardCached(1L)).thenReturn(Mono.just(itemCard));
 
         StepVerifier.create(itemService.getItem(" ", 1L))
                 .assertNext(result -> {
@@ -142,7 +130,7 @@ class ItemServiceTest {
                 .verifyComplete();
 
         verify(cacheService).getItemCardCached(1L);
-        verifyNoInteractions(userRepository, cartItemRepository);
+        verifyNoInteractions(cartItemRepository);
     }
 
     @Test
@@ -150,6 +138,8 @@ class ItemServiceTest {
     void getItem_whenItemDoesNotExist_shouldThrowNotFoundException() {
         when(cacheService.getItemCardCached(999L))
                 .thenReturn(Mono.error(new NotFoundException("Item with id = 999 not found")));
+
+        when(userService.getRequiredUserId(USERNAME)).thenReturn(Mono.just(USER_ID));
 
         StepVerifier.create(itemService.getItem(USERNAME, 999L))
                 .expectErrorSatisfies(error -> {
@@ -160,17 +150,17 @@ class ItemServiceTest {
                 .verify();
 
         verify(cacheService).getItemCardCached(999L);
-        verifyNoInteractions(userRepository, cartItemRepository);
+        verify(userService).getRequiredUserId(USERNAME);
     }
 
     @Test
     @DisplayName("getItem(username, id) -> throws NotFoundException when user does not exist")
     void getItem_whenUserDoesNotExist_shouldThrowNotFoundException() {
-        when(cacheService.getItemCardCached(1L))
-                .thenReturn(Mono.just(itemCard));
-
-        when(userRepository.findByUsername(USERNAME))
-                .thenReturn(Mono.empty());
+        when(cacheService.getItemCardCached(1L)).thenReturn(Mono.just(itemCard));
+        when(userService.getRequiredUserId(USERNAME))
+                .thenReturn(Mono.error(
+                        new NotFoundException("User with username = user not found")
+                ));
 
         StepVerifier.create(itemService.getItem(USERNAME, 1L))
                 .expectErrorSatisfies(error -> {
@@ -181,7 +171,7 @@ class ItemServiceTest {
                 .verify();
 
         verify(cacheService).getItemCardCached(1L);
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUserId(USERNAME);
         verifyNoInteractions(cartItemRepository);
     }
 }

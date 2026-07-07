@@ -42,18 +42,24 @@ class OrderServiceTest {
 
     @Mock
     OrderRepository orderRepository;
+
     @Mock
     OrderItemRepository orderItemRepository;
+
     @Mock
     CartItemRepository cartItemRepository;
+
     @Mock
     ItemRepository itemRepository;
+
     @Mock
     ItemCacheService cacheService;
+
     @Mock
     PaymentClient paymentClient;
+
     @Mock
-    UserRepository userRepository;
+    UserService userService;
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -100,7 +106,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("getOrders(username) -> returns user's orders")
     void getOrders_shouldReturnUserOrders() {
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getRequiredUser(USERNAME)).thenReturn(Mono.just(user));
         when(orderRepository.findAllByUserIdOrderByIdAsc(USER_ID))
                 .thenReturn(Flux.just(order_1, order_2));
 
@@ -118,7 +124,7 @@ class OrderServiceTest {
                 .expectNextCount(2)
                 .verifyComplete();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(orderRepository).findAllByUserIdOrderByIdAsc(USER_ID);
         verify(orderItemRepository).findAllByOrderIdOrderByIdAsc(1L);
         verify(orderItemRepository).findAllByOrderIdOrderByIdAsc(2L);
@@ -127,14 +133,14 @@ class OrderServiceTest {
     @Test
     @DisplayName("getOrders(username) -> returns empty Flux when user has no orders")
     void getOrders_whenUserHasNoOrders_shouldReturnEmptyFlux() {
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getRequiredUser(USERNAME)).thenReturn(Mono.just(user));
         when(orderRepository.findAllByUserIdOrderByIdAsc(USER_ID))
                 .thenReturn(Flux.empty());
 
         StepVerifier.create(orderService.getOrders(USERNAME))
                 .verifyComplete();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(orderRepository).findAllByUserIdOrderByIdAsc(USER_ID);
         verifyNoInteractions(orderItemRepository, cacheService);
     }
@@ -142,7 +148,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("getOrder(username, id) -> returns order when it belongs to user")
     void getOrder_whenOrderExistsAndBelongsToUser_shouldReturnOrder() {
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getRequiredUser(USERNAME)).thenReturn(Mono.just(user));
         when(orderRepository.findByIdAndUserId(1L, USER_ID))
                 .thenReturn(Mono.just(order_1));
 
@@ -160,7 +166,7 @@ class OrderServiceTest {
                 })
                 .verifyComplete();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(orderRepository).findByIdAndUserId(1L, USER_ID);
         verify(orderItemRepository).findAllByOrderIdOrderByIdAsc(1L);
         verify(itemRepository).findAllById(List.of(1L, 2L));
@@ -169,7 +175,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("getOrder(username, id) -> throws NotFoundException when order does not belong to user")
     void getOrder_whenOrderBelongsToAnotherUser_shouldThrowNotFoundException() {
-        when(userRepository.findByUsername(OTHER_USERNAME)).thenReturn(Mono.just(otherUser));
+        when(userService.getRequiredUser(OTHER_USERNAME)).thenReturn(Mono.just(otherUser));
         when(orderRepository.findByIdAndUserId(1L, OTHER_USER_ID))
                 .thenReturn(Mono.empty());
 
@@ -180,7 +186,7 @@ class OrderServiceTest {
                 })
                 .verify();
 
-        verify(userRepository).findByUsername(OTHER_USERNAME);
+        verify(userService).getRequiredUser(OTHER_USERNAME);
         verify(orderRepository).findByIdAndUserId(1L, OTHER_USER_ID);
         verifyNoInteractions(orderItemRepository, cacheService);
     }
@@ -188,14 +194,14 @@ class OrderServiceTest {
     @Test
     @DisplayName("getOrders(other-user) -> does not return user_id=1 orders")
     void getOrders_whenOtherUser_shouldNotReturnFirstUserOrders() {
-        when(userRepository.findByUsername(OTHER_USERNAME)).thenReturn(Mono.just(otherUser));
+        when(userService.getRequiredUser(OTHER_USERNAME)).thenReturn(Mono.just(otherUser));
         when(orderRepository.findAllByUserIdOrderByIdAsc(OTHER_USER_ID))
                 .thenReturn(Flux.empty());
 
         StepVerifier.create(orderService.getOrders(OTHER_USERNAME))
                 .verifyComplete();
 
-        verify(userRepository).findByUsername(OTHER_USERNAME);
+        verify(userService).getRequiredUser(OTHER_USERNAME);
         verify(orderRepository).findAllByUserIdOrderByIdAsc(OTHER_USER_ID);
         verify(orderRepository, never()).findAllByUserIdOrderByIdAsc(USER_ID);
         verifyNoInteractions(orderItemRepository, cacheService);
@@ -204,7 +210,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("getOrder(null, id) -> throws NotFoundException for anonymous user")
     void getOrder_whenAnonymousUser_shouldThrowException() {
-        when(userRepository.findByUsername(null)).thenReturn(Mono.empty());
+        when(userService.getRequiredUser(null)).thenReturn(Mono.empty());
 
         StepVerifier.create(orderService.getOrder(null, 1L))
                 .expectErrorSatisfies(error -> {
@@ -213,14 +219,14 @@ class OrderServiceTest {
                 })
                 .verify();
 
-        verify(userRepository).findByUsername(null);
+        verify(userService).getRequiredUser(null);
         verifyNoInteractions(orderRepository, orderItemRepository, cacheService);
     }
 
     @Test
     @DisplayName("createOrderFromCart(username) -> throws BadRequestException when cart is empty")
     void createOrderFromCart_whenCartIsEmpty_shouldThrowBadRequestException() {
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getRequiredUser(USERNAME)).thenReturn(Mono.just(user));
         when(cartItemRepository.findAllByUserId(USER_ID)).thenReturn(Flux.empty());
 
         StepVerifier.create(orderService.createOrderFromCart(USERNAME))
@@ -230,7 +236,7 @@ class OrderServiceTest {
                 })
                 .verify();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findAllByUserId(USER_ID);
         verify(orderRepository, never()).save(any(Order.class));
         verify(orderItemRepository, never()).saveAll(any(Iterable.class));
@@ -240,7 +246,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("createOrderFromCart(username) -> creates order, saves items and clears user's cart")
     void createOrderFromCart_whenCartHasItems_shouldCreateOrder() {
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getRequiredUser(USERNAME)).thenReturn(Mono.just(user));
         when(cartItemRepository.findAllByUserId(USER_ID))
                 .thenReturn(Flux.just(cartItem_1, cartItem_2));
 
@@ -275,7 +281,7 @@ class OrderServiceTest {
                 .expectNext(1L)
                 .verifyComplete();
 
-        verify(userRepository).findByUsername(USERNAME);
+        verify(userService).getRequiredUser(USERNAME);
         verify(cartItemRepository).findAllByUserId(USER_ID);
         verify(cacheService).getItemCardCached(1L);
         verify(cacheService).getItemCardCached(2L);
@@ -292,7 +298,7 @@ class OrderServiceTest {
     void createOrderFromCart_shouldCalculateTotalCorrectly() {
         long totalSum = 999L * 2 + 2999L * 3;
 
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getRequiredUser(USERNAME)).thenReturn(Mono.just(user));
         when(cartItemRepository.findAllByUserId(USER_ID))
                 .thenReturn(Flux.just(cartItem_1, cartItem_2));
 
@@ -347,7 +353,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("createOrderFromCart(username) -> throws BadRequestException when payment failed")
     void createOrderFromCart_whenPaymentFailed_shouldThrowBadRequestException() {
-        when(userRepository.findByUsername(USERNAME)).thenReturn(Mono.just(user));
+        when(userService.getRequiredUser(USERNAME)).thenReturn(Mono.just(user));
         when(cartItemRepository.findAllByUserId(USER_ID))
                 .thenReturn(Flux.just(cartItem_1, cartItem_2));
 

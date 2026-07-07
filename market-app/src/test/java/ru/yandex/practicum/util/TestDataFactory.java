@@ -1,8 +1,10 @@
 package ru.yandex.practicum.util;
 
 import ru.yandex.practicum.dto.cache.ItemCardCacheDto;
+import ru.yandex.practicum.dto.payment.BalanceResponseDto;
 import ru.yandex.practicum.model.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public final class TestDataFactory {
@@ -94,5 +96,11 @@ public final class TestDataFactory {
                 .imgPath(item.getImgPath())
                 .price(item.getPrice())
                 .build();
+    }
+
+    public static BalanceResponseDto balanceDto() {
+        return new BalanceResponseDto(
+                BigDecimal.valueOf(10000),
+                "RUB");
     }
 }
