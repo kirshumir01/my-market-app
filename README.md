@@ -394,7 +394,7 @@ payment-service/build/libs/
 
 ___
 
-3. Запуск тестов
+#### 3. Запуск тестов
 
 Для Unix-систем:
 
@@ -412,7 +412,7 @@ gradlew.bat clean test
 
 ___
 
-4. Запуск инфраструктуры
+#### 4. Запуск инфраструктуры
 
 Для локального запуска необходимо поднять сервисы инфраструктуры:
 
@@ -432,7 +432,112 @@ docker ps
 
 ___
 
-5. Запуск payment-service
+#### 5. Настройка Keycloak Client Secret
+
+Для локального запуска приложения необходимо настроить client-secret клиента market-app в Keycloak.
+
+5.1. Создайте локальный файл .env
+
+Скопируйте шаблон:
+
+```text
+cp .env.example .env
+```
+Файл `.env` не должен попадать в репозиторий и используется только локально.
+
+Пример содержимого `.env`:
+
+```text
+KEYCLOAK_MARKET_APP_CLIENT_SECRET=your-client-secret
+```
+
+5.2. Запустите Keycloak
+
+Запустите контейнеры:
+
+```text
+docker compose up -d
+```
+
+После запуска откройте административную консоль Keycloak:
+
+http://localhost:8180
+
+Войдите под учетной записью администратора (user: admin, password: admin).
+
+5.3. Получите Client Secret
+
+В административной консоли Keycloak:
+
+1. Выберите realm my-market.
+2. Откройте раздел Clients.
+3. Выберите клиент market-app.
+4. Перейдите на вкладку Credentials.
+5. Скопируйте значение Client Secret.
+
+5.4. Обновите файл `.env`
+
+Вставьте полученный secret в файл `.env`:
+
+```text
+KEYCLOAK_MARKET_APP_CLIENT_SECRET=<скопированный-secret>
+```
+Например:
+
+```text
+KEYCLOAK_MARKET_APP_CLIENT_SECRET=VHkecOawbo9Ka9fi6pWNmZqxBIqhR5Vl
+```
+5.5. Проверка получения Keycloak client-secret
+
+В терминале введите команду:
+
+```bash
+curl -X POST \
+http://localhost:8180/realms/my-market/protocol/openid-connect/token \
+-H "Content-Type: application/x-www-form-urlencoded" \
+-d "grant_type=client_credentials" \
+-d "client_id=market-app" \
+-d "client_secret=<paste-real-secret>"
+```
+
+Ожидаемый результат:
+
+```json
+{
+"access_token": "...",
+"expires_in": 300,
+"token_type": "Bearer"
+}
+```
+Если результат `{"error":"unauthorized_client"}` - ошибка в настройке клиента или secret в Keycloak.
+
+5.6. Перезапустите приложения
+
+После изменения значения `KEYCLOAK_MARKET_APP_CLIENT_SECRET` необходимо перезапустить приложения market-app и payment-service, чтобы Spring Boot перечитал переменные окружения.
+
+Если приложения запущены из IDE:
+
+1. Остановите market-app и payment-service.
+2. Запустите их повторно.
+
+Если приложения запущены в Docker-контейнерах:
+
+```text
+docker compose restart market-app payment-service
+```
+Перезапуск контейнеров keycloak, postgres и redis не требуется.
+
+5.7. Обновление Client Secret
+
+Если client secret был изменен в Keycloak:
+
+- Получите новый secret в разделе Clients → market-app → Credentials.
+- Обновите значение `KEYCLOAK_MARKET_APP_CLIENT_SECRET` в файле `.env`.
+- Перезапустите приложение.
+
+Важно: файл `.env` содержит секреты и не должен добавляться в Git. В репозитории хранится только файл `.env.example` с примером структуры.
+
+#### 6. Запуск payment-service
 
 Для Unix-систем:
 
@@ -448,7 +553,7 @@ gradlew.bat :payment-service:bootRun --args='--spring.profiles.active=dev'
 
 ___
 
-6. Запуск market-app
+#### 7. Запуск market-app
 
 Для Unix-систем:
 
@@ -464,7 +569,7 @@ gradlew.bat :market-app:bootRun --args='--spring.profiles.active=dev'
 
 ___
 
-7. Проверка запуска
+#### 8. Проверка запуска
 
 После успешного запуска приложение будет доступно по адресам:
 
