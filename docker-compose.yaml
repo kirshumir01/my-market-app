@@ -73,6 +73,7 @@ services:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      KEYCLOAK_MARKET_APP_CLIENT_SECRET: ${KEYCLOAK_MARKET_APP_CLIENT_SECRET}
 
 volumes:
   postgres_data:
