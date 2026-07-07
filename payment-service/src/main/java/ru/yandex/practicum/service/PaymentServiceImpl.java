@@ -12,7 +12,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Service
@@ -21,7 +20,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final String currency;
     private final BigDecimal initialBalance;
     private final Map<Long, BigDecimal> balances = new ConcurrentHashMap<>();
-    private final ReentrantLock paymentLock = new ReentrantLock();
+    private final Map<Long, ReentrantLock> userLocks = new ConcurrentHashMap<>();
 
     public PaymentServiceImpl(
             @Value("${payment.currency}") String currency,
@@ -45,15 +44,12 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private PaymentResponseDto processPayment(PaymentRequestDto request) {
-        paymentLock.lock();
+        Long userId = request.getUserId();
+        ReentrantLock lock = userLocks.computeIfAbsent(userId, id -> new ReentrantLock());
 
+        lock.lock();
         try {
-            Long userId = request.getUserId();
-
-            BigDecimal currentBalance = balances.getOrDefault(
-                    userId,
-                    initialBalance
-            );
+            BigDecimal currentBalance = balances.getOrDefault(userId, initialBalance);
 
             if (currentBalance.compareTo(request.getAmount()) < 0) {
                 return new PaymentResponseDto(
@@ -68,7 +64,6 @@ public class PaymentServiceImpl implements PaymentService {
             }
 
             BigDecimal remainingBalance = currentBalance.subtract(request.getAmount());
-
             balances.put(userId, remainingBalance);
 
             return new PaymentResponseDto(
@@ -81,7 +76,7 @@ public class PaymentServiceImpl implements PaymentService {
                     Instant.now()
             );
         } finally {
-            paymentLock.unlock();
+            lock.unlock();
         }
     }
 }
