@@ -8,7 +8,6 @@
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "VHkecOawbo9Ka9fi6pWNmZqxBIqhR5Vl",
       "serviceAccountsEnabled": true,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
