@@ -20,6 +20,7 @@ import ru.yandex.practicum.model.ItemSort;
 import ru.yandex.practicum.repository.CartItemRepository;
 import ru.yandex.practicum.repository.ItemRepository;
 import ru.yandex.practicum.service.CatalogService;
+import ru.yandex.practicum.service.UserService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +33,7 @@ public class CatalogServiceImpl implements CatalogService {
 
     private final ItemRepository itemRepository;
     private final CartItemRepository cartItemRepository;
+    private final UserService userService;
 
     @Value("${catalog.default-page-size}")
     private int defaultPageSize;
@@ -41,13 +43,19 @@ public class CatalogServiceImpl implements CatalogService {
 
     @Override
     @Transactional(readOnly = true)
-    public Mono<ItemsPageDto> getItems(String search, ItemSort sort, int pageNumber, int pageSize) {
+    public Mono<ItemsPageDto> getItems(
+            String username,
+            String search,
+            ItemSort sort,
+            int pageNumber,
+            int pageSize
+    ) {
         CatalogPageRequest request = buildCatalogPageRequest(search, sort, pageNumber, pageSize);
 
         return countItems(request)
                 .flatMap(totalItems -> findItems(request)
                         .collectList()
-                        .flatMap(items -> buildItemsPage(items, request, totalItems)));
+                        .flatMap(items -> buildItemsPage(username, items, request, totalItems)));
     }
 
     private CatalogPageRequest buildCatalogPageRequest(
@@ -98,6 +106,7 @@ public class CatalogServiceImpl implements CatalogService {
     }
 
     private Mono<ItemsPageDto> buildItemsPage(
+            String username,
             List<Item> pageItems,
             CatalogPageRequest request,
             long totalItems
@@ -119,7 +128,7 @@ public class CatalogServiceImpl implements CatalogService {
             ));
         }
 
-        return getItemsCountInCart(pageItems)
+        return getItemsCountInCart(username, pageItems)
                 .map(itemsCount -> toItemsPageDto(
                         pageItems,
                         itemsCount,
@@ -129,14 +138,20 @@ public class CatalogServiceImpl implements CatalogService {
                 ));
     }
 
-    private Mono<Map<Long, Integer>> getItemsCountInCart(List<Item> pageItems) {
+    private Mono<Map<Long, Integer>> getItemsCountInCart(String username, List<Item> pageItems) {
+        if (username == null || username.isBlank()) {
+            return Mono.just(Map.of());
+        }
+
         List<Long> itemIds = pageItems.stream()
                 .map(Item::getId)
                 .toList();
 
-        return cartItemRepository.findAllByItemIdIn(itemIds)
+        return userService.getOptionalUserId(username)
+                .flatMapMany(userId -> cartItemRepository.findAllByUserIdAndItemIdIn(userId, itemIds))
                 .collectList()
-                .map(this::toItemsCountMap);
+                .map(this::toItemsCountMap)
+                .defaultIfEmpty(Map.of());
     }
 
     private Map<Long, Integer> toItemsCountMap(List<CartItem> cartItems) {

@@ -11,7 +11,11 @@ import java.util.List;
 @Repository
 public interface CartItemRepository extends ReactiveCrudRepository<CartItem, Long> {
 
-    Flux<CartItem> findAllByItemIdIn(List<Long> itemIds);
+    Flux<CartItem> findAllByUserId(long userId);
 
-    Mono<CartItem> findByItemId(Long itemId);
+    Flux<CartItem> findAllByUserIdAndItemIdIn(long userId, List<Long> itemIds);
+
+    Mono<CartItem> findByUserIdAndItemId(long userId, long itemId);
+
+    Mono<Void> deleteAllByUserId(long userId);
 }

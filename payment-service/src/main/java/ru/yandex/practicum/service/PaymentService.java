@@ -7,7 +7,7 @@ import ru.yandex.practicum.dto.PaymentResponseDto;
 
 public interface PaymentService {
 
-    Mono<BalanceResponseDto> getBalance();
+    Mono<BalanceResponseDto> getBalance(long userId);
 
     Mono<PaymentResponseDto> makePayment(PaymentRequestDto request);
 }

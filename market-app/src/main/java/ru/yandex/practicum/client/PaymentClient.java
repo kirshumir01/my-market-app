@@ -14,9 +14,9 @@ public class PaymentClient {
 
     private final WebClient paymentServiceWebClient;
 
-    public Mono<BalanceResponseDto> getBalance() {
+    public Mono<BalanceResponseDto> getBalance(Long userId) {
         return paymentServiceWebClient.get()
-                .uri("/api/v1/balance")
+                .uri("/api/v1/balance/{userId}", userId)
                 .retrieve()
                 .bodyToMono(BalanceResponseDto.class);
     }

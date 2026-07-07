@@ -6,5 +6,11 @@ import ru.yandex.practicum.model.ItemSort;
 
 public interface CatalogService {
 
-    Mono<ItemsPageDto> getItems(String search, ItemSort sort, int pageNumber, int pageSize);
+    Mono<ItemsPageDto> getItems(
+            String username,
+            String search,
+            ItemSort sort,
+            int pageNumber,
+            int pageSize
+    );
 }

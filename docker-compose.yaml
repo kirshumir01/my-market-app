@@ -1,35 +1,43 @@
 services:
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: my-market-keycloak
+    command: start-dev --import-realm
+    ports:
+      - "8180:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./docker/keycloak/my-market-realm.json:/opt/keycloak/data/import/my-market-realm.json:ro
+
   postgres:
     image: postgres:16
-    container_name: market-postgres
+    container_name: my-market-postgres
     restart: always
-
     environment:
-      POSTGRES_DB: market-app
+      POSTGRES_DB: my-market-app
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
-
     ports:
       - "5432:5432"
-      -
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d my-market-app"]
+      test: [ "CMD-SHELL", "pg_isready -U admin -d my-market-app" ]
       interval: 5s
       timeout: 5s
       retries: 10
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
   redis:
     image: redis:7
-    container_name: market-redis
+    container_name: my-market-redis
     restart: always
     ports:
       - "6379:6379"
-
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -37,17 +45,20 @@ services:
   payment-service:
     build:
       context: ./payment-service
-    container_name: payment-service
+    container_name: my-market-payment-service
     restart: always
     ports:
       - "8081:8081"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      keycloak:
+        condition: service_started
 
   app:
     build:
       context: ./market-app
-    container_name: market-app
+    container_name: my-market-app
     restart: always
     depends_on:
       postgres:
@@ -56,10 +67,13 @@ services:
         condition: service_healthy
       payment-service:
         condition: service_started
+      keycloak:
+        condition: service_started
     ports:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      KEYCLOAK_MARKET_APP_CLIENT_SECRET: ${KEYCLOAK_MARKET_APP_CLIENT_SECRET}
 
 volumes:
   postgres_data:

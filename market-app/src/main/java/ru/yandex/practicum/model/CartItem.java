@@ -14,6 +14,8 @@ import org.springframework.data.relational.core.mapping.Table;
 public class CartItem {
     @Id
     private Long id;
+    @Column("user_id")
+    private Long userId;
     @Column("item_id")
     private Long itemId;
     @Column("count")

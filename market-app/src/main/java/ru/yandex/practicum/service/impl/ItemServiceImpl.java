@@ -13,26 +13,34 @@ import ru.yandex.practicum.model.Item;
 import ru.yandex.practicum.repository.CartItemRepository;
 import ru.yandex.practicum.repository.ItemRepository;
 import ru.yandex.practicum.service.ItemService;
+import ru.yandex.practicum.service.UserService;
 
 @Service
 @RequiredArgsConstructor
 public class ItemServiceImpl implements ItemService {
+
     private final ItemRepository itemRepository;
     private final CartItemRepository cartItemRepository;
     private final ItemCacheService cacheService;
+    private final UserService userService;
 
     @Override
     @Transactional(readOnly = true)
-    public Mono<ItemDto> getItem(long itemId) {
+    public Mono<ItemDto> getItem(String username, long itemId) {
+        Mono<Integer> countMono = username == null || username.isBlank()
+                ? Mono.just(0)
+                : userService.getRequiredUserId(username)
+                .flatMap(userId -> cartItemRepository.findByUserIdAndItemId(userId, itemId))
+                .map(CartItem::getCount)
+                .defaultIfEmpty(0);
+
         return cacheService.getItemCardCached(itemId)
-                .flatMap(itemCard -> cartItemRepository.findByItemId(itemId)
-                        .map(CartItem::getCount)
-                        .defaultIfEmpty(0)
-                        .map(count -> {
-                            ItemDto itemDto = ItemMapper.toItemDto(itemCard);
-                            itemDto.setCount(count);
-                            return itemDto;
-                        }));
+                .zipWith(countMono)
+                .map(tuple -> {
+                    ItemDto itemDto = ItemMapper.toItemDto(tuple.getT1());
+                    itemDto.setCount(tuple.getT2());
+                    return itemDto;
+                });
     }
 
     @Override

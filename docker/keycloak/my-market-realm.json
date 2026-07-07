@@ -1,0 +1,18 @@
+{
+  "realm": "my-market",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "market-app",
+      "name": "Market App Service Client",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": []
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<html lang="en"
+      xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="https://www.thymeleaf.org/extras/spring-security">
 
 <head>
     <meta charset="utf-8">
@@ -14,14 +16,54 @@
             <div class="col">
                 <div class="hstack gap-3">
                     <h2>
-                        <a href="/items"
+                        <a th:href="@{/items}"
                            class="badge text-bg-success text-decoration-none">
                             Витрина магазина
                         </a>
                     </h2>
-                    <a href="/items/new" class="btn btn-success bi bi-plus-circle"> Новый товар</a>
-                    <a href="/cart/items" class="btn btn-secondary bi bi-cart4 ms-auto"> Корзина</a>
-                    <a href="/items" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
+
+                    <div class="small text-secondary">
+                        <span sec:authorize="isAuthenticated()">
+                            Пользователь:
+                        <strong sec:authentication="name"></strong>
+                        </span>
+
+                        <span sec:authorize="isAnonymous()">
+                            guest (unauthorized)
+                        </span>
+                    </div>
+
+                    <form sec:authorize="isAuthenticated()"
+                          method="post"
+                          th:action="@{/logout}"
+                          class="mb-0">
+                        <input type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <button type="submit"
+                                class="btn btn-outline-secondary">
+                            Выйти
+                        </button>
+                    </form>
+
+                    <a th:if="${isAdmin}"
+                       th:href="@{/items/new}"
+                       class="btn btn-success bi bi-plus-circle">
+                        Новый товар
+                    </a>
+
+                    <a sec:authorize="isAuthenticated()"
+                       th:href="@{/orders}"
+                       class="btn btn-secondary ms-auto bi bi-file-earmark-text">
+                        Заказы
+                    </a>
+
+                    <a sec:authorize="isAuthenticated()"
+                       th:href="@{/cart/items}"
+                       class="btn btn-secondary bi bi-cart4">
+                        Корзина
+                    </a>
                 </div>
             </div>
         </div>
@@ -29,13 +71,21 @@
             <div class="col">
                 <div class="card">
                     <div class="card-header">
-                        <a th:text="${'Заказ №'+order.id}" th:href="${'/orders/'+order.id}"></a>
+                        <a th:href="@{/orders/{id}(id=${order.id})}">
+                            <span th:text="'Заказ №' + ${order.id}"></span>
+                        </a>
                     </div>
-                    <ul class="list-group list-group-flush" th:each="item : ${order.items}">
-                        <li class="list-group-item" th:text="${item.title+' ('+item.count+' шт.) '+(item.price*item.count)+' руб.'}"/>
+
+                    <ul class="list-group list-group-flush"
+                        th:each="item : ${order.items}">
+                        <li class="list-group-item"
+                            th:text="${item.title + ' (' + item.count + ' шт.) '
+                    + (item.price * item.count) + ' руб.'}">
+                        </li>
                     </ul>
+
                     <div class="card-footer">
-                        <b th:text="${'Сумма: '+order.totalSum}+' руб.'"></b>
+                        <b th:text="${'Сумма: ' + order.totalSum + ' руб.'}"></b>
                     </div>
                 </div>
             </div>

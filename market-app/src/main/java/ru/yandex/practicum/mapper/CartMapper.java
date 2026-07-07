@@ -23,7 +23,8 @@ public class CartMapper {
             boolean paymentError,
             boolean paymentServiceError
     ) {
-        boolean canOrder = balance != null
+        boolean canOrder = !cart.getItems().isEmpty()
+                && balance != null
                 && balance.compareTo(BigDecimal.valueOf(cart.getTotal())) >= 0;
 
         return new CartViewDto(

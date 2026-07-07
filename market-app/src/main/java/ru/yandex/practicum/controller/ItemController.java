@@ -1,6 +1,8 @@
 package ru.yandex.practicum.controller;
 
 import lombok.AllArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -19,6 +21,9 @@ import ru.yandex.practicum.mapper.ItemRequestMapper;
 import ru.yandex.practicum.model.CartAction;
 import ru.yandex.practicum.service.CartService;
 import ru.yandex.practicum.service.ItemService;
+import ru.yandex.practicum.utils.SecurityUtils;
+
+import java.security.Principal;
 
 @Validated
 @Controller
@@ -32,51 +37,62 @@ public class ItemController {
 
     @PostMapping("/items")
     public Mono<String> changeItemCountFromCatalog(ServerWebExchange exchange) {
+        MultiValueMap<String, String> queryParams = exchange.getRequest().getQueryParams();
 
-        MultiValueMap<String, String> queryParams =
-                exchange.getRequest().getQueryParams();
+        return Mono.zip(
+                exchange.getPrincipal().map(Principal::getName),
+                exchange.getFormData().defaultIfEmpty(new LinkedMultiValueMap<>())
+        ).flatMap(tuple -> {
+            String username = tuple.getT1();
+            MultiValueMap<String, String> formData = tuple.getT2();
 
-        return exchange.getFormData()
-                .defaultIfEmpty(new LinkedMultiValueMap<>())
-                .flatMap(formData -> {
+            CatalogRequest request = catalogMapper.from(queryParams, formData);
 
-                    CatalogRequest request = catalogMapper.from(queryParams, formData);
+            String redirectUrl =
+                    "redirect:/items?search=%s&sort=%s&pageNumber=%d&pageSize=%d"
+                            .formatted(
+                                    request.getSearch(),
+                                    request.getSort(),
+                                    request.getPageNumber(),
+                                    request.getPageSize()
+                            );
 
-                    String redirectUrl =
-                            "redirect:/items?search=%s&sort=%s&pageNumber=%d&pageSize=%d"
-                                    .formatted(
-                                            request.getSearch(),
-                                            request.getSort(),
-                                            request.getPageNumber(),
-                                            request.getPageSize()
-                                    );
-
-                    return cartService.changeItemsCount(
-                                    request.getItemId(),
-                                    request.getAction())
-                            .thenReturn(redirectUrl);
-                });
+            return cartService.changeItemsCount(
+                            username,
+                            request.getItemId(),
+                            request.getAction())
+                    .thenReturn(redirectUrl);
+        });
     }
 
     @GetMapping("/items/new")
-    public Mono<Rendering> newItemForm() {
+    @PreAuthorize("hasRole('ADMIN')")
+    public Mono<Rendering> newItemForm(Authentication authentication) {
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
+
         return Mono.just(Rendering.view("item-add-form")
-                .modelAttribute("item", new ItemRequest())
+                .modelAttribute("isAdmin", isAdmin)
                 .build());
     }
 
     @PostMapping("/items/new")
+    @PreAuthorize("hasRole('ADMIN')")
     public Mono<String> createItem(@ModelAttribute ItemRequest request) {
         return itemService.createItem(request)
                 .thenReturn("redirect:/items");
     }
 
     @GetMapping("/items/{id}")
-    public Mono<Rendering> getItem(@PathVariable("id") Long itemId) {
-        return itemService.getItem(itemId)
+    public Mono<Rendering> getItem(
+            @PathVariable("id") Long itemId,
+            Authentication authentication
+    ) {
+        return itemService.getItem(
+                SecurityUtils.getUsername(authentication), itemId
+                )
                 .map(item -> Rendering.view("item")
                         .modelAttribute("item", item)
-                        .modelAttribute("id", item.getId())
+                        .modelAttribute("isAdmin", SecurityUtils.isAdmin(authentication))
                         .build());
     }
 
@@ -85,16 +101,19 @@ public class ItemController {
             @PathVariable("id") Long id,
             ServerWebExchange exchange
     ) {
-        MultiValueMap<String, String> queryParams =
-                exchange.getRequest().getQueryParams();
+        MultiValueMap<String, String> queryParams = exchange.getRequest().getQueryParams();
 
-        return exchange.getFormData()
-                .defaultIfEmpty(new LinkedMultiValueMap<>())
-                .flatMap(formData -> {
-                    CartAction action = itemRequestMapper.getAction(queryParams, formData);
+        return Mono.zip(
+                exchange.getPrincipal().map(Principal::getName),
+                exchange.getFormData().defaultIfEmpty(new LinkedMultiValueMap<>())
+        ).flatMap(tuple -> {
+            String username = tuple.getT1();
+            MultiValueMap<String, String> formData = tuple.getT2();
 
-                    return cartService.changeItemsCount(id, action)
-                            .thenReturn("redirect:/items/" + id);
-                });
+            CartAction action = itemRequestMapper.getAction(queryParams, formData);
+
+            return cartService.changeItemsCount(username, id, action)
+                    .thenReturn("redirect:/items/" + id);
+        });
     }
 }
